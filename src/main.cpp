@@ -17,6 +17,11 @@ FirebaseConfig firebaseConfig;
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, "pool.ntp.org", -3 * 3600, 60000);
 
+// Variáveis persistentes para horários
+static String horaAtivacao = "";
+static String horaDesativacao = "";
+String horarioAtual = timeClient.getFormattedTime();
+
 // Variáveis de conexão
 WiFiManager wm;
 bool ethernetConnected = false;
@@ -129,26 +134,6 @@ void setup()
     }
 }
 
-String processarhorarios(String dataPath, String jsonData, String jsonKey, String pathEsperado)
-{
-    if (jsonData.indexOf(jsonKey) != -1 && dataPath == pathEsperado)
-    {
-        int comecoIndex1 = jsonData.indexOf(jsonKey) + jsonKey.length() + 2;
-        int finalIndex1 = jsonData.indexOf(",", comecoIndex1);
-
-        if (finalIndex1 == -1)
-        {
-            finalIndex1 = jsonData.indexOf("}", comecoIndex1);
-        }
-
-        String horario = jsonData.substring(comecoIndex1, finalIndex1);
-        horario.replace("\"", "");
-        horario.trim();
-        return horario;
-    }
-    return "nada";
-}
-
 // Função auxiliar para alternar o estado de um relé
 void toggleRele(int pino)
 {
@@ -163,161 +148,141 @@ void toggleRele(int pino)
     delay(200); // Evitar ativação múltipla rápida
 }
 
+String processarhorarios(String dataPath, String jsonData, String jsonKey, String pathEsperado)
+{
+    if (dataPath == pathEsperado && jsonData.indexOf(jsonKey) != -1)
+    {
+        int startIndex = jsonData.indexOf(jsonKey) + jsonKey.length() + 2;
+        int endIndex = jsonData.indexOf(",", startIndex);
+        if (endIndex == -1)
+            endIndex = jsonData.indexOf("}", startIndex);
+
+        if (startIndex > 0 && endIndex > startIndex)
+        {
+            String horario = jsonData.substring(startIndex, endIndex);
+            horario.replace("\"", "");
+            horario.trim();
+
+            // Corrigir formato inválido, exemplo: "113:27:00"
+            if (horario.length() > 8)
+                horario = horario.substring(horario.length() - 8);
+
+            return horario;
+        }
+    }
+    return ""; // Retorna vazio se não encontrar
+}
+
 void tiposBots()
 {
-     if (!Firebase.readStream(firebaseData))
-  {
-    Serial.println("Erro no stream /IdsESP/123456, aguardando próximo ciclo...");
-    Firebase.endStream(firebaseData);
-    if (Firebase.beginStream(firebaseData, "/IdsESP/123456"))
+    if (!Firebase.readStream(firebaseData))
     {
-      Serial.println("Contador de loop: ");
-      Serial.println("Firebase stream reconectado com sucesso para /IdsESP/123456.");
-    }
-    else
-    {
-      Serial.println("Contador de loop: ");
-      Serial.println("Não foi possível iniciar o stream do Firebase para /IdsESP/123456");
-      Serial.println(firebaseData.errorReason());
-    }
-  }
-
-  if (firebaseData.streamAvailable())
-  {
-    Serial.println("Dados atualizados recebidos para /IdsESP/123456:");
-    String jsonData = firebaseData.stringData();
-    Serial.println(jsonData);
-    Serial.println(firebaseData.dataPath());
-
-    if ((jsonData.indexOf("\"status\":true") != -1) && firebaseData.dataPath() == "/rele1")
-    {
-      Serial.println("Ativando pulso no rele1");
-      digitalWrite(rele[0].pino, HIGH);
-      delay(200);
-      digitalWrite(rele[0].pino, LOW);
-      rele[0].status = LOW;
-
-      } else if (jsonData.indexOf("\tipoBotao\":switch") != -1 && firebaseData.dataPath() == "/rele1") {
-        Serial.println("ativando modo switch");
-        digitalWrite(rele[0].pino, HIGH);
-        rele[0].status = HIGH;
+        Serial.println("Erro no stream /IdsESP/123456, aguardando próximo ciclo...");
+        Firebase.endStream(firebaseData);
+        if (Firebase.beginStream(firebaseData, "/IdsESP/123456"))
+        {
+            Serial.println("Firebase stream reconectado com sucesso para /IdsESP/123456.");
+        }
+        else
+        {
+            Serial.println("Não foi possível iniciar o stream do Firebase para /IdsESP/123456");
+            Serial.println(firebaseData.errorReason());
+        }
     }
 
-    else if ((jsonData.indexOf("\"status\":true") != -1) && (firebaseData.dataPath() == "/rele2"))
+    if (firebaseData.streamAvailable())
     {
-      Serial.println("Ativando pulso no rele2");
-      digitalWrite(rele[1].pino, HIGH);
-      delay(200);
-      digitalWrite(rele[1].pino, LOW);
-      rele[1].status = LOW;
-    }
-    else if (jsonData.indexOf("\tipoBotao\":switch") != -1 && firebaseData.dataPath() == "/rele2") {
-      Serial.println("ativando modo switch");
-      digitalWrite(rele[1].pino, HIGH);
-      rele[1].status = HIGH;
-    }
-    else if ((jsonData.indexOf("\"status\":true") != -1) && (firebaseData.dataPath() == "/rele3"))
-    {
-      Serial.println("Ativando pulso no rele3");
-      digitalWrite(rele[2].pino, HIGH);
-      delay(200);
-      digitalWrite(rele[2].pino, LOW);
-      rele[2].status = LOW;
-      } else if (jsonData.indexOf("\tipoBotao\":switch") != -1 && firebaseData.dataPath() == "/rele3") {
-        Serial.println("ativando modo switch");
-        digitalWrite(rele[2].pino, HIGH);
-        rele[2].status = HIGH;
-    }
-    else if ((jsonData.indexOf("\"status\":true") != -1) && (firebaseData.dataPath() == "/rele4"))
-    {
-      Serial.println("Ativando pulso no rele4");
-      digitalWrite(rele[3].pino, HIGH);
-      delay(200);
-      digitalWrite(rele[3].pino, LOW);
-      rele[3].status = LOW;
-    }
-    else if (jsonData.indexOf("\tipoBotao\":switch") != -1 && firebaseData.dataPath() == "/rele4") {
-      Serial.println("ativando modo switch");
-      digitalWrite(rele[3].pino, HIGH);
-      rele[3].status = HIGH;
-    }
-        else if ((jsonData.indexOf("\"status\":true") != -1) && (firebaseData.dataPath() == "/rele5"))
-    {
-      Serial.println("Ativando pulso no rele5");
-      digitalWrite(rele[4].pino, HIGH);
-      delay(200);
-      digitalWrite(rele[4].pino, LOW);
-      rele[4].status = LOW;
-    }
-    else
-    {
-      Serial.println("Nenhuma correspondência de atualização de status para os relés.");
-    }
+        Serial.println("Dados atualizados recebidos para /IdsESP/123456:");
+        String jsonData = firebaseData.stringData();
+        Serial.println(jsonData);
+        Serial.println(firebaseData.dataPath());
+        if (jsonData.indexOf("\"status\":true") != -1 && firebaseData.dataPath() == "/rele1")
+        {
+            Serial.println("Ativando pulso no rele1");
+            digitalWrite(rele[0].pino, HIGH);
+            delay(200);
+            digitalWrite(rele[0].pino, LOW);
+            rele[0].status = LOW;
 
-        // Variáveis persistentes para horários
-        static String horaAtivacao = "";
-        static String horaDesativacao = "";
-        String horarioAtual = timeClient.getFormattedTime();
+            // } else if (jsonData.indexOf("\tipoBotao\":switch") != -1 && firebaseData.dataPath() == "/rele1") {
+            //   Serial.println("ativando modo switch");
+            //   digitalWrite(rele[0].pino, HIGH);
+            //   rele[0].status = HIGH;
+        }
 
-        // Capturar horários do Firebase
-        if ((jsonData.indexOf("\"horaAtivacao\":") != -1) && firebaseData.dataPath() == "/rele1")
+        else if (jsonData.indexOf("\"status\":true") != -1 && firebaseData.dataPath() == "/rele2")
+        {
+            Serial.println("Ativando pulso no rele2");
+            digitalWrite(rele[1].pino, HIGH);
+            delay(200);
+            digitalWrite(rele[1].pino, LOW);
+            rele[1].status = LOW;
+        }
+        // else if (jsonData.indexOf("\tipoBotao\":switch") != -1 && firebaseData.dataPath() == "/rele2") {
+        //   Serial.println("ativando modo switch");
+        //   digitalWrite(rele[1].pino, HIGH);
+        //   rele[1].status = HIGH;
+        // }
+        else if (jsonData.indexOf("\"status\":true") != -1 && firebaseData.dataPath() == "/rele3")
+        {
+            Serial.println("Ativando pulso no rele3");
+            digitalWrite(rele[2].pino, HIGH);
+            delay(200);
+            digitalWrite(rele[2].pino, LOW);
+            rele[2].status = LOW;
+            // } else if (jsonData.indexOf("\tipoBotao\":switch") != -1 && firebaseData.dataPath() == "/rele3") {
+            //   Serial.println("ativando modo switch");
+            //   digitalWrite(rele[2].pino, HIGH);
+            //   rele[2].status = HIGH;
+        }
+        else if (jsonData.indexOf("\"status\":true") != -1 && firebaseData.dataPath() == "/rele4")
+        {
+            Serial.println("Ativando pulso no rele4");
+            digitalWrite(rele[3].pino, HIGH);
+            delay(200);
+            digitalWrite(rele[3].pino, LOW);
+            rele[3].status = LOW;
+        }
+        // else if (jsonData.indexOf("\tipoBotao\":switch") != -1 && firebaseData.dataPath() == "/rele4") {
+        //   Serial.println("ativando modo switch");
+        //   digitalWrite(rele[3].pino, HIGH);
+        //   rele[3].status = HIGH;
+        // }
+        else if (jsonData.indexOf("\"status\":true") != -1 && firebaseData.dataPath() == "/rele5")
+        {
+            Serial.println("Ativando pulso no rele5");
+            digitalWrite(rele[4].pino, HIGH);
+            delay(200);
+            digitalWrite(rele[4].pino, LOW);
+            rele[4].status = LOW;
+        }
+        else
+        {
+            Serial.println("Nenhuma correspondência de atualização de status para os relés.");
+        }
+        // Processar horário de ativação
+        if (jsonData.indexOf("\"horaAtivacao\":") != -1 && firebaseData.dataPath() == "/rele1")
         {
             horaAtivacao = processarhorarios(firebaseData.dataPath(), jsonData, "\"horaAtivacao\":", "/rele1");
             Serial.println("Horário de ativação capturado do Firebase: " + horaAtivacao);
         }
 
+        // Processar horário de desativação
         if (jsonData.indexOf("\"horaDesativacao\":") != -1 && firebaseData.dataPath() == "/rele1")
         {
             horaDesativacao = processarhorarios(firebaseData.dataPath(), jsonData, "\"horaDesativacao\":", "/rele1");
             Serial.println("Horário de desativação capturado do Firebase: " + horaDesativacao);
         }
 
-        // Normalizar strings
-        horaAtivacao.trim();
-        horaDesativacao.trim();
-        horarioAtual.trim();
-
-        // Verificar horários
-        if (horaAtivacao.length() == 8 && horaDesativacao.length() == 8)
+        // Checar se o dado é relevante antes de exibir a mensagem genérica
+        if (jsonData.indexOf("\"status\":true") == -1 &&
+            jsonData.indexOf("\"horaAtivacao\":") == -1 &&
+            jsonData.indexOf("\"horaDesativacao\":") == -1)
         {
-            int horaAtiva = horaAtivacao.substring(0, 2).toInt();
-            int minutoAtiva = horaAtivacao.substring(3, 5).toInt();
-            int segundoAtiva = horaAtivacao.substring(6, 8).toInt();
-
-            int horaDesativa = horaDesativacao.substring(0, 2).toInt();
-            int minutoDesativa = horaDesativacao.substring(3, 5).toInt();
-            int segundoDesativa = horaDesativacao.substring(6, 8).toInt();
-
-            int horaAtual = timeClient.getHours();
-            int minutoAtual = timeClient.getMinutes();
-            int segundoAtual = timeClient.getSeconds();
-
-            int horarioAtualSegundos = horaAtual * 3600 + minutoAtual * 60 + segundoAtual;
-            int horarioAtivacaoSegundos = horaAtiva * 3600 + minutoAtiva * 60 + segundoAtiva;
-            int horarioDesativacaoSegundos = horaDesativa * 3600 + minutoDesativa * 60 + segundoDesativa;
-
-            // Verificar ativação
-            if (abs(horarioAtualSegundos - horarioAtivacaoSegundos) <= 5)
-            {
-                digitalWrite(rele[0].pino, HIGH);
-                Serial.println("Relé 1 ativado!");
-            }
-
-            // Verificar desativação
-            if (abs(horarioAtualSegundos - horarioDesativacaoSegundos) <= 5)
-            {
-                digitalWrite(rele[0].pino, LOW);
-                Serial.println("Relé 1 desativado!");
-            }
+            Serial.println("Nenhuma correspondência de atualização de status para os relés.");
         }
     }
 }
-
-
-
-
-unsigned long previousMillis = 0;
-const long interval = 1000;
 
 void loop()
 {
@@ -336,7 +301,6 @@ void loop()
         }
     }
 
-    tiposBots();
     // Atualizar o horário NTP
     static unsigned long previousMillis = 0;
     const long interval = 1000;
@@ -349,5 +313,32 @@ void loop()
         Serial.println("Hora atual do NTP: " + timeClient.getFormattedTime());
     }
 
+    // Verificar horários
+    if (horaAtivacao.length() == 8 && horaDesativacao.length() == 8)
+    {
+        int horaAtualSegundos = timeClient.getHours() * 3600 + timeClient.getMinutes() * 60 + timeClient.getSeconds();
+        int horarioAtivacaoSegundos = horaAtivacao.substring(0, 2).toInt() * 3600 +
+                                      horaAtivacao.substring(3, 5).toInt() * 60 +
+                                      horaAtivacao.substring(6, 8).toInt();
+        int horarioDesativacaoSegundos = horaDesativacao.substring(0, 2).toInt() * 3600 +
+                                         horaDesativacao.substring(3, 5).toInt() * 60 +
+                                         horaDesativacao.substring(6, 8).toInt();
+
+        // Ativar relé no horário correto
+        if (horaAtualSegundos == horarioAtivacaoSegundos)
+        {
+            digitalWrite(rele[0].pino, HIGH);
+            Serial.println("Relé 1 ativado!");
+        }
+
+        // Desativar relé no horário correto
+        if (horaAtualSegundos == horarioDesativacaoSegundos)
+        {
+            digitalWrite(rele[0].pino, LOW);
+            Serial.println("Relé 1 desativado!");
+        }
+    }
+
+    tiposBots();
     delay(100); // Pequeno delay para evitar loops excessivos
 }
