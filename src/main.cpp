@@ -102,7 +102,7 @@ void setup()
     Firebase.reconnectWiFi(true);
 
     // Iniciar o stream do Firebase
-    if (!Firebase.beginStream(firebaseData, "/IdsESP/9999"))
+    if (!Firebase.beginStream(firebaseData, "/IdsESP/123456"))
     {
         Serial.println("Não foi possível iniciar o stream do Firebase");
         Serial.println(firebaseData.errorReason());
@@ -123,7 +123,7 @@ void setup()
     // Iniciar o servidor WiFi se estiver conectado via Ethernet
     if (ethernetConnected)
     {
-        WiFi.softAP("ESP32_AP", "9999"); // Configura um ponto de acesso WiFi no ESP32
+        WiFi.softAP("ESP32_AP", "123456"); // Configura um ponto de acesso WiFi no ESP32
         wifiServer.begin();
         Serial.println("Ponto de acesso WiFi criado com sucesso para Ethernet.");
     }
@@ -167,28 +167,29 @@ void tiposBots()
 {
      if (!Firebase.readStream(firebaseData))
   {
-    Serial.println("Erro no stream /IdsESP/9999, aguardando próximo ciclo...");
+    Serial.println("Erro no stream /IdsESP/123456, aguardando próximo ciclo...");
     Firebase.endStream(firebaseData);
-    if (Firebase.beginStream(firebaseData, "/IdsESP/9999"))
+    if (Firebase.beginStream(firebaseData, "/IdsESP/123456"))
     {
       Serial.println("Contador de loop: ");
-      Serial.println("Firebase stream reconectado com sucesso para /IdsESP/9999.");
+      Serial.println("Firebase stream reconectado com sucesso para /IdsESP/123456.");
     }
     else
     {
       Serial.println("Contador de loop: ");
-      Serial.println("Não foi possível iniciar o stream do Firebase para /IdsESP/9999");
+      Serial.println("Não foi possível iniciar o stream do Firebase para /IdsESP/123456");
       Serial.println(firebaseData.errorReason());
     }
   }
 
   if (firebaseData.streamAvailable())
   {
-    Serial.println("Dados atualizados recebidos para /IdsESP/9999:");
+    Serial.println("Dados atualizados recebidos para /IdsESP/123456:");
     String jsonData = firebaseData.stringData();
     Serial.println(jsonData);
+    Serial.println(firebaseData.dataPath());
 
-    if (jsonData.indexOf("\"status\":true") != -1 && firebaseData.dataPath() == "/rele1")
+    if ((jsonData.indexOf("\"status\":true") != -1) && firebaseData.dataPath() == "/rele1")
     {
       Serial.println("Ativando pulso no rele1");
       digitalWrite(rele[0].pino, HIGH);
@@ -196,13 +197,13 @@ void tiposBots()
       digitalWrite(rele[0].pino, LOW);
       rele[0].status = LOW;
 
-      // } else if (jsonData.indexOf("\tipoBotao\":switch") != -1 && firebaseData.dataPath() == "/rele1") {
-      //   Serial.println("ativando modo switch");
-      //   digitalWrite(rele[0].pino, HIGH);
-      //   rele[0].status = HIGH;
+      } else if (jsonData.indexOf("\tipoBotao\":switch") != -1 && firebaseData.dataPath() == "/rele1") {
+        Serial.println("ativando modo switch");
+        digitalWrite(rele[0].pino, HIGH);
+        rele[0].status = HIGH;
     }
 
-    else if (jsonData.indexOf("\"status\":true") != -1 && firebaseData.dataPath() == "/rele2")
+    else if ((jsonData.indexOf("\"status\":true") != -1) && (firebaseData.dataPath() == "/rele2"))
     {
       Serial.println("Ativando pulso no rele2");
       digitalWrite(rele[1].pino, HIGH);
@@ -210,24 +211,24 @@ void tiposBots()
       digitalWrite(rele[1].pino, LOW);
       rele[1].status = LOW;
     }
-    // else if (jsonData.indexOf("\tipoBotao\":switch") != -1 && firebaseData.dataPath() == "/rele2") {
-    //   Serial.println("ativando modo switch");
-    //   digitalWrite(rele[1].pino, HIGH);
-    //   rele[1].status = HIGH;
-    // }
-    else if (jsonData.indexOf("\"status\":true") != -1 && firebaseData.dataPath() == "/rele3")
+    else if (jsonData.indexOf("\tipoBotao\":switch") != -1 && firebaseData.dataPath() == "/rele2") {
+      Serial.println("ativando modo switch");
+      digitalWrite(rele[1].pino, HIGH);
+      rele[1].status = HIGH;
+    }
+    else if ((jsonData.indexOf("\"status\":true") != -1) && (firebaseData.dataPath() == "/rele3"))
     {
       Serial.println("Ativando pulso no rele3");
       digitalWrite(rele[2].pino, HIGH);
       delay(200);
       digitalWrite(rele[2].pino, LOW);
       rele[2].status = LOW;
-      // } else if (jsonData.indexOf("\tipoBotao\":switch") != -1 && firebaseData.dataPath() == "/rele3") {
-      //   Serial.println("ativando modo switch");
-      //   digitalWrite(rele[2].pino, HIGH);
-      //   rele[2].status = HIGH;
+      } else if (jsonData.indexOf("\tipoBotao\":switch") != -1 && firebaseData.dataPath() == "/rele3") {
+        Serial.println("ativando modo switch");
+        digitalWrite(rele[2].pino, HIGH);
+        rele[2].status = HIGH;
     }
-    else if (jsonData.indexOf("\"status\":true") != -1 && firebaseData.dataPath() == "/rele4")
+    else if ((jsonData.indexOf("\"status\":true") != -1) && (firebaseData.dataPath() == "/rele4"))
     {
       Serial.println("Ativando pulso no rele4");
       digitalWrite(rele[3].pino, HIGH);
@@ -235,12 +236,12 @@ void tiposBots()
       digitalWrite(rele[3].pino, LOW);
       rele[3].status = LOW;
     }
-    // else if (jsonData.indexOf("\tipoBotao\":switch") != -1 && firebaseData.dataPath() == "/rele4") {
-    //   Serial.println("ativando modo switch");
-    //   digitalWrite(rele[3].pino, HIGH);
-    //   rele[3].status = HIGH;
-    // }
-        else if (jsonData.indexOf("\"status\":true") != -1 && firebaseData.dataPath() == "/rele5")
+    else if (jsonData.indexOf("\tipoBotao\":switch") != -1 && firebaseData.dataPath() == "/rele4") {
+      Serial.println("ativando modo switch");
+      digitalWrite(rele[3].pino, HIGH);
+      rele[3].status = HIGH;
+    }
+        else if ((jsonData.indexOf("\"status\":true") != -1) && (firebaseData.dataPath() == "/rele5"))
     {
       Serial.println("Ativando pulso no rele5");
       digitalWrite(rele[4].pino, HIGH);
@@ -259,7 +260,7 @@ void tiposBots()
         String horarioAtual = timeClient.getFormattedTime();
 
         // Capturar horários do Firebase
-        if (jsonData.indexOf("\"horaAtivacao\":") != -1 && firebaseData.dataPath() == "/rele1")
+        if ((jsonData.indexOf("\"horaAtivacao\":") != -1) && firebaseData.dataPath() == "/rele1")
         {
             horaAtivacao = processarhorarios(firebaseData.dataPath(), jsonData, "\"horaAtivacao\":", "/rele1");
             Serial.println("Horário de ativação capturado do Firebase: " + horaAtivacao);
@@ -322,15 +323,15 @@ void loop()
 {
     if (!Firebase.readStream(firebaseData))
     {
-        Serial.println("Erro no stream /IdsESP/9999, aguardando próximo ciclo...");
+        Serial.println("Erro no stream /IdsESP/123456, aguardando próximo ciclo...");
         Firebase.endStream(firebaseData);
-        if (Firebase.beginStream(firebaseData, "/IdsESP/9999"))
+        if (Firebase.beginStream(firebaseData, "/IdsESP/123456"))
         {
-            Serial.println("Firebase stream reconectado com sucesso para /IdsESP/9999.");
+            Serial.println("Firebase stream reconectado com sucesso para /IdsESP/123456.");
         }
         else
         {
-            Serial.println("Não foi possível iniciar o stream do Firebase para /IdsESP/9999");
+            Serial.println("Não foi possível iniciar o stream do Firebase para /IdsESP/123456");
             Serial.println(firebaseData.errorReason());
         }
     }
