@@ -5,8 +5,6 @@ int reles[] = {33, 32, 14, 16};
 #define BTN_CONFIG 17
 bool res;
 
-uint8_t eth_MAC[] = {0x02, 0xF0, 0x0D, 0xBE, 0xEF, 0x03};
-
 class Reles
 {
 public:
@@ -30,10 +28,7 @@ Reles rele[5] = {
     Reles(16, 35),
     Reles(24, 43)};
 
-const char *API_KEY = "AIzaSyCSISjoMLyNpbfHNN3RS06WkMx4L21GjTU";
-const char *DATABASE_URL = "https://firestore-esp32-de37c-default-rtdb.firebaseio.com/";
-const char *EMAIL = "renan.hdk.sgr@gmail.com";
-const char *EMAIL_PASSWORD = "180931er";
+
 int rele1 = 0;
 int rele2 = 0;
 int rele3 = 0;
