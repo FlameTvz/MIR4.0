@@ -21,12 +21,13 @@ public:
     }
 };
 
-Reles rele[5] = {
+Reles rele[4] = {
     Reles(33, 34),
     Reles(32, 36),
     Reles(14, 39),
-    Reles(16, 35),
-    Reles(24, 43)};
+    Reles(16, 35)
+    // Reles(24, 43)
+    };
 
 
 int rele1 = 0;
