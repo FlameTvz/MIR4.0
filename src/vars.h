@@ -1,6 +1,10 @@
 #include <Arduino.h>
 
-int reles[] = {33, 32, 14, 16};
+int tempoClick = 200;
+bool leitura[] = {0, 0, 0, 0, 0};
+int qtdRele = 5;
+
+int reles[] = {33, 32, 14, 16, 15};
 #define TRIGGER_PIN 25
 #define BTN_CONFIG 17
 bool res;
@@ -21,12 +25,12 @@ public:
     }
 };
 
-Reles rele[4] = {
+Reles rele[5] = {
     Reles(33, 34),
     Reles(32, 36),
     Reles(14, 39),
-    Reles(16, 35)
-    // Reles(24, 43)
+    Reles(16, 35),
+    Reles(15, 2)
     };
 
 

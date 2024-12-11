@@ -24,6 +24,14 @@ NTPClient timeClient(ntpUDP, "pool.ntp.org", -3 * 3600, 60000);
 
 String horaAtivacao = "";
 String horaDesativacao = "";
+String horaAtivacao2 = "";
+String horaDesativacao2 = "";
+String horaAtivacao3 = "";
+String horaDesativacao3 = "";
+String horaAtivacao4 = "";
+String horaDesativacao4 = "";
+String horaAtivacao5 = "";
+String horaDesativacao5 = "";
 String horarioAtual = "";
 
 bool ethernetConnected = false, wifiConnected = false;
@@ -107,34 +115,84 @@ String processarHorarios(String dataPath, String jsonData, String jsonKey, Strin
 {
     if (dataPath != pathEsperado || jsonData.indexOf(jsonKey) == -1)
         return "";
-    int startIndex = jsonData.indexOf(jsonKey) + jsonKey.length() + 2;
+
+    int startIndex = jsonData.indexOf(jsonKey) + jsonKey.length() + 1;
     int endIndex = jsonData.indexOf(",", startIndex);
     if (endIndex == -1)
         endIndex = jsonData.indexOf("}", startIndex);
+
     if (startIndex <= 0 || endIndex <= startIndex)
         return "";
+
+    // Extrair o horário exatamente como está no JSON
     String horario = jsonData.substring(startIndex, endIndex);
-    horario.replace("\"", "");
-    horario.trim();
-    return horario.length() > 8 ? horario.substring(horario.length() - 8) : horario;
+    horario.replace("\"", ""); // Remove aspas extras
+    horario.trim();            // Remove espaços extras
+
+    // Garantir que o formato HH:MM:SS seja mantido sem alterar o JSON original
+    if (horario.length() == 8)
+    {
+        return horario; // Retorna diretamente o horário se já estiver no formato correto
+    }
+
+    // Caso contrário, ajusta o formato manualmente
+    while (horario.length() < 8)
+    {
+        horario = "0" + horario; // Adiciona zeros à esquerda se necessário
+    }
+
+    return horario;
 }
 
-void reiniciarStream() {
+void enviarheartbeat()
+{
+    String heartbeatPath = databasePath + "/heartbeat";
+    String timestamp = String(timeClient.getHours()) + ":" + String(timeClient.getMinutes()) + ":" + String(timeClient.getSeconds());
+    if (Firebase.RTDB.setString(&firebaseData, heartbeatPath.c_str(), timestamp))
+    {
+        Serial.println("HeartBeat enviado: " + timestamp);
+    }
+    else
+    {
+        Serial.println("Erro ao enviar HeartBeat: " + firebaseData.errorReason());
+    }
+}
+
+void atualizarEstadoRele(int pino, int estado)
+{
+    String relePath = databasePath + "/reles/" + String(pino);
+    if (Firebase.RTDB.setInt(&firebaseData, relePath.c_str(), estado))
+    {
+        Serial.println("Estado do rele " + String(pino) + " atualizado para: " + String(estado));
+    }
+    else
+    {
+        Serial.println("Erro ao atualizar estado do rele " + String(pino) + ": " + firebaseData.errorReason());
+    }
+}
+
+void reiniciarStream()
+{
     Firebase.RTDB.endStream(&firebaseData); // Finaliza qualquer stream ativo
 
     // Reconfigura e tenta reiniciar o stream
-    if (!Firebase.RTDB.beginStream(&firebaseData, databasePath.c_str())) {
+    if (!Firebase.RTDB.beginStream(&firebaseData, databasePath.c_str()))
+    {
         Serial.println("Falha ao reiniciar o stream: " + firebaseData.errorReason());
-    } else {
+    }
+    else
+    {
         Serial.println("Stream reiniciado com sucesso.");
     }
-     streamReiniciado = true; // Sucesso no reinício
+    streamReiniciado = true; // Sucesso no reinício
 }
 
 void tiposBots()
 {
-      if (!Firebase.RTDB.readStream(&firebaseData)) {
-        if (!streamReiniciado) { // Só tenta reiniciar se ainda não foi reiniciado
+    if (!Firebase.RTDB.readStream(&firebaseData))
+    {
+        if (!streamReiniciado)
+        { // Só tenta reiniciar se ainda não foi reiniciado
             Serial.println("Stream desconectado. Tentando reiniciar...");
             reiniciarStream();
         }
@@ -147,8 +205,9 @@ void tiposBots()
     String jsonData = firebaseData.to<String>();
     String dataPath = firebaseData.dataPath();
     Serial.println("Dados recebidos: " + jsonData);
-         
-    if (dataPath == "/keeplive") { // Certifique-se de que o caminho está correto
+
+    if (dataPath == "/keeplive")
+    { // Certifique-se de que o caminho está correto
         // Extraia o valor do campo 'atualizado' recebido
         int startIndex = jsonData.indexOf("\"hora\":\"") + 7;
         int endIndex = jsonData.indexOf("\"", startIndex);
@@ -157,7 +216,6 @@ void tiposBots()
         Serial.println("Hora atualizada recebida: " + horarioAtualizado);
         // Aqui você pode usar o valor recebido como necessário
     }
-
 
     for (int i = 0; i < 5; i++)
     {
@@ -168,11 +226,13 @@ void tiposBots()
             {
                 digitalWrite(rele[i].pino, HIGH);
                 registrarEvento(("Relé " + String(i + 1)).c_str(), "Ativado");
+                atualizarEstadoRele(rele[i].pino, 1);
             }
             else if (jsonData.indexOf("\"status\":false") != -1)
             {
                 digitalWrite(rele[i].pino, LOW);
                 registrarEvento(("Relé " + String(i + 1)).c_str(), "Desativado");
+                atualizarEstadoRele(rele[i].pino, 0);
             }
         }
     }
@@ -185,6 +245,50 @@ void tiposBots()
     {
         horaDesativacao = processarHorarios(dataPath, jsonData, "\"horaDesativacao\":", "/rele1");
         Serial.println("Horário de desativação capturado: " + horaDesativacao);
+    }
+
+    if (jsonData.indexOf("\"horaAtivacao\":") != -1 && dataPath == "/rele2")
+    {
+        horaAtivacao2 = processarHorarios(dataPath, jsonData, "\"horaAtivacao\":", "/rele2");
+        Serial.println("Horário de ativação capturado: " + horaAtivacao2);
+    }
+    if (jsonData.indexOf("\"horaDesativacao\":") != -1 && dataPath == "/rele2")
+    {
+        horaDesativacao2 = processarHorarios(dataPath, jsonData, "\"horaDesativacao\":", "/rele2");
+        Serial.println("Horário de desativação capturado: " + horaDesativacao2);
+    }
+
+    if (jsonData.indexOf("\"horaAtivacao\":") != -1 && dataPath == "/rele3")
+    {
+        horaAtivacao3 = processarHorarios(dataPath, jsonData, "\"horaAtivacao\":", "/rele3");
+        Serial.println("Horário de ativação capturado: " + horaAtivacao3);
+    }
+    if (jsonData.indexOf("\"horaDesativacao\":") != -1 && dataPath == "/rele3")
+    {
+        horaDesativacao3 = processarHorarios(dataPath, jsonData, "\"horaDesativacao\":", "/rele3");
+        Serial.println("Horário de desativação capturado: " + horaDesativacao3);
+    }
+
+    if (jsonData.indexOf("\"horaAtivacao\":") != -1 && dataPath == "/rele4")
+    {
+        horaAtivacao4 = processarHorarios(dataPath, jsonData, "\"horaAtivacao\":", "/rele4");
+        Serial.println("Horário de ativação capturado: " + horaAtivacao4);
+    }
+    if (jsonData.indexOf("\"horaDesativacao\":") != -1 && dataPath == "/rele4")
+    {
+        horaDesativacao4 = processarHorarios(dataPath, jsonData, "\"horaDesativacao\":", "/rele4");
+        Serial.println("Horário de desativação capturado: " + horaDesativacao4);
+    }
+
+    if (jsonData.indexOf("\"horaAtivacao\":") != -1 && dataPath == "/rele5")
+    {
+        horaAtivacao5 = processarHorarios(dataPath, jsonData, "\"horaAtivacao\":", "/rele5");
+        Serial.println("Horário de ativação capturado: " + horaAtivacao5);
+    }
+    if (jsonData.indexOf("\"horaDesativacao\":") != -1 && dataPath == "/rele5")
+    {
+        horaDesativacao5 = processarHorarios(dataPath, jsonData, "\"horaDesativacao\":", "/rele5");
+        Serial.println("Horário de desativação capturado: " + horaDesativacao5);
     }
 }
 
@@ -203,10 +307,9 @@ void setup()
     databasePath = "/IdsESP/" + String(espUniqueId);
 
     // Inicializa os pinos dos relés e botões
-    for (int i = 0; i < 4; i++)
+    for (int i = 0; i < qtdRele; i++)
     {
         pinMode(rele[i].pino, OUTPUT);
-        digitalWrite(rele[i].pino, LOW);
         pinMode(rele[i].btn, INPUT);
     }
 
@@ -287,9 +390,99 @@ void setup()
     Serial.println("Sistema de arquivos montado com sucesso!");
 }
 
+void leRele()
+{
+    bool valor;
+    for (int i = 0; i < qtdRele; i++)
+    {
+        leitura[i] = digitalRead(rele[i].btn);
+        // Serial.println(leitura[i]);
+    }
+}
+
+void entradaNaSaida()
+{
+    bool algumON = 0;
+    leRele();
+    for (int i = 0; i < qtdRele; i++)
+    {
+        // Serial.println(i);
+        if (leitura[i] == 1)
+        {
+            Serial.printf("Botão do relé %d está pressionado (HIGH)\n", i);
+            digitalWrite(rele[i].pino, HIGH);
+            algumON = 1;
+        }
+    }
+    if(algumON == 1){
+    //         //*************************** */
+    //         display.clearDisplay();
+    //         display.fillScreen(WHITE);
+    //         display.display();
+    //         //*************************** */
+            delay(tempoClick);
+
+    }
+    // else{
+    //         //*************************** */
+    //         display.clearDisplay();
+    //         display.fillScreen(BLACK);
+    //         display.display();
+    //         //*************************** */
+    // }
+    for (int i = 0; i < qtdRele; i++)
+    {
+        if (leitura[i] == 1)
+        {
+            digitalWrite(rele[i].pino, LOW);
+        }
+    }
+    for (int i = 0; i < qtdRele; i++)
+    {
+        if (leitura[i] == 1)
+        {
+            if (i == 0)
+            {
+                rele1++;
+                salvarDados("/rele1.txt", rele1);
+            }
+            if (i == 1)
+            {
+                rele1++;
+                salvarDados("/rele2.txt", rele2);
+            }
+            if (i == 2)
+            {
+                rele1++;
+                salvarDados("/rele3.txt", rele3);
+            }
+            if (i == 3)
+            {
+                rele1++;
+                salvarDados("/rele4.txt", rele4);
+            }
+            if (i == 4)
+            {
+                rele1++;
+                salvarDados("/rele5.txt", rele5);
+            }
+        }
+    }
+}
+
 void loop()
 {
     tiposBots();
+    entradaNaSaida();
+    static unsigned long lastHeartBeat = 0;
+    const unsigned long heartBeatInterval = 60000; // 1 minuto
+
+    // Envia o HeartBeat periodicamente
+    if (millis() - lastHeartBeat >= heartBeatInterval)
+    {
+        lastHeartBeat = millis();
+        enviarheartbeat();
+    }
 
     // Atualizar o horário NTP
     static unsigned long previousMillis = 0;
@@ -316,18 +509,152 @@ void loop()
                                          horaDesativacao.substring(3, 5).toInt() * 60 +
                                          horaDesativacao.substring(6, 8).toInt();
 
+        int toleranciaSegundos = 2; // Tolerância de 2 segundos
+
         // Ativar relé no horário correto
-        if (horaAtualSegundos == horarioAtivacaoSegundos)
+        if (abs(horaAtualSegundos - horarioAtivacaoSegundos) <= toleranciaSegundos)
         {
             digitalWrite(rele[0].pino, HIGH);
             Serial.println("Relé 1 ativado!");
+            atualizarEstadoRele(rele[0].pino, true);
+            // registrarEvento(rele[0].pino, "Ativado");
         }
 
         // Desativar relé no horário correto
-        if (horaAtualSegundos == horarioDesativacaoSegundos)
+        if (abs(horaAtualSegundos - horarioDesativacaoSegundos) <= toleranciaSegundos)
         {
             digitalWrite(rele[0].pino, LOW);
             Serial.println("Relé 1 desativado!");
+            atualizarEstadoRele(rele[0].pino, false);
+            // registrarEvento(rele[0].pino, "Desativado");
+        }
+    }
+
+    if (horaAtivacao2.length() == 8 && horaDesativacao2.length() == 8)
+    {
+        int horaAtualSegundos2 = timeClient.getHours() * 3600 + timeClient.getMinutes() * 60 + timeClient.getSeconds();
+        int horarioAtivacaoSegundos2 = horaAtivacao2.substring(0, 2).toInt() * 3600 +
+                                       horaAtivacao2.substring(3, 5).toInt() * 60 +
+                                       horaAtivacao2.substring(6, 8).toInt();
+
+        int horarioDesativacaoSegundos2 = horaDesativacao2.substring(0, 2).toInt() * 3600 +
+                                          horaDesativacao2.substring(3, 5).toInt() * 60 +
+                                          horaDesativacao2.substring(6, 8).toInt();
+
+        int toleranciaSegundos2 = 2; // Tolerância de 2 segundos
+
+        // Ativar relé no horário correto
+        if (abs(horaAtualSegundos2 - horarioAtivacaoSegundos2) <= toleranciaSegundos2)
+        {
+            digitalWrite(rele[1].pino, HIGH);
+            Serial.println("Relé 1 ativado!");
+            atualizarEstadoRele(rele[1].pino, true);
+            // registrarEvento(rele[1].pino, "Ativado");
+        }
+
+        // Desativar relé no horário correto
+        if (abs(horaAtualSegundos2 - horarioDesativacaoSegundos2) <= toleranciaSegundos2)
+        {
+            digitalWrite(rele[1].pino, LOW);
+            Serial.println("Relé 1 desativado!");
+            atualizarEstadoRele(rele[1].pino, false);
+            // registrarEvento(rele[1].pino, "Desativado");
+        }
+    }
+
+    if (horaAtivacao3.length() == 8 && horaDesativacao3.length() == 8)
+    {
+        int horaAtualSegundos3 = timeClient.getHours() * 3600 + timeClient.getMinutes() * 60 + timeClient.getSeconds();
+        int horarioAtivacaoSegundos3 = horaAtivacao3.substring(0, 2).toInt() * 3600 +
+                                       horaAtivacao3.substring(3, 5).toInt() * 60 +
+                                       horaAtivacao3.substring(6, 8).toInt();
+
+        int horarioDesativacaoSegundos3 = horaDesativacao3.substring(0, 2).toInt() * 3600 +
+                                          horaDesativacao3.substring(3, 5).toInt() * 60 +
+                                          horaDesativacao3.substring(6, 8).toInt();
+
+        int toleranciaSegundos3 = 2; // Tolerância de 2 segundos
+
+        // Ativar relé no horário correto
+        if (abs(horaAtualSegundos3 - horarioAtivacaoSegundos3) <= toleranciaSegundos3)
+        {
+            digitalWrite(rele[2].pino, HIGH);
+            Serial.println("Relé 1 ativado!");
+            atualizarEstadoRele(rele[2].pino, true);
+            // registrarEvento(rele[2].pino, "Ativado");
+        }
+
+        // Desativar relé no horário correto
+        if (abs(horaAtualSegundos3 - horarioDesativacaoSegundos3) <= toleranciaSegundos3)
+        {
+            digitalWrite(rele[2].pino, LOW);
+            Serial.println("Relé 1 desativado!");
+            atualizarEstadoRele(rele[2].pino, false);
+            // registrarEvento(rele[2].pino, "Desativado");
+        }
+    }
+
+    if (horaAtivacao4.length() == 8 && horaDesativacao4.length() == 8)
+    {
+        int horaAtualSegundos4 = timeClient.getHours() * 3600 + timeClient.getMinutes() * 60 + timeClient.getSeconds();
+        int horarioAtivacaoSegundos4 = horaAtivacao4.substring(0, 2).toInt() * 3600 +
+                                       horaAtivacao4.substring(3, 5).toInt() * 60 +
+                                       horaAtivacao4.substring(6, 8).toInt();
+
+        int horarioDesativacaoSegundos4 = horaDesativacao4.substring(0, 2).toInt() * 3600 +
+                                          horaDesativacao4.substring(3, 5).toInt() * 60 +
+                                          horaDesativacao4.substring(6, 8).toInt();
+
+        int toleranciaSegundos4 = 2; // Tolerância de 2 segundos
+
+        // Ativar relé no horário correto
+        if (abs(horaAtualSegundos4 - horarioAtivacaoSegundos4) <= toleranciaSegundos4)
+        {
+            digitalWrite(rele[3].pino, HIGH);
+            Serial.println("Relé 1 ativado!");
+            atualizarEstadoRele(rele[3].pino, true);
+            // registrarEvento(rele[3].pino, "Ativado");
+        }
+
+        // Desativar relé no horário correto
+        if (abs(horaAtualSegundos4 - horarioDesativacaoSegundos4) <= toleranciaSegundos4)
+        {
+            digitalWrite(rele[3].pino, LOW);
+            Serial.println("Relé 1 desativado!");
+            atualizarEstadoRele(rele[3].pino, false);
+            // registrarEvento(rele[3].pino, "Desativado");
+        }
+    }
+
+    if (horaAtivacao5.length() == 8 && horaDesativacao5.length() == 8)
+    {
+        int horaAtualSegundos5 = timeClient.getHours() * 3600 + timeClient.getMinutes() * 60 + timeClient.getSeconds();
+        int horarioAtivacaoSegundos5 = horaAtivacao5.substring(0, 2).toInt() * 3600 +
+                                       horaAtivacao5.substring(3, 5).toInt() * 60 +
+                                       horaAtivacao5.substring(6, 8).toInt();
+
+        int horarioDesativacaoSegundos5 = horaDesativacao5.substring(0, 2).toInt() * 3600 +
+                                          horaDesativacao5.substring(3, 5).toInt() * 60 +
+                                          horaDesativacao5.substring(6, 8).toInt();
+
+        int toleranciaSegundos5 = 2; // Tolerância de 2 segundos
+
+        // Ativar relé no horário correto
+        if (abs(horaAtualSegundos5 - horarioAtivacaoSegundos5) <= toleranciaSegundos5)
+        {
+            digitalWrite(rele[4].pino, HIGH);
+            Serial.println("Relé 1 ativado!");
+            atualizarEstadoRele(rele[4].pino, true);
+            // registrarEvento(rele[4].pino, "Ativado");
+        }
+
+        // Desativar relé no horário correto
+        if (abs(horaAtualSegundos5 - horarioDesativacaoSegundos5) <= toleranciaSegundos5)
+        {
+            digitalWrite(rele[4].pino, LOW);
+            Serial.println("Relé 1 desativado!");
+            atualizarEstadoRele(rele[4].pino, false);
+            // registrarEvento(rele[4].pino, "Desativado");
         }
     }
 
