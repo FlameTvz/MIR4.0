@@ -36,3 +36,4 @@ int rele3 = 0;
 int rele4 = 0;
 int rele5 = 0;
 #define FORMAT_SPIFFS_IF_FAILED true
+bool streamReiniciado = false;

@@ -119,29 +119,45 @@ String processarHorarios(String dataPath, String jsonData, String jsonKey, Strin
     return horario.length() > 8 ? horario.substring(horario.length() - 8) : horario;
 }
 
+void reiniciarStream() {
+    Firebase.RTDB.endStream(&firebaseData); // Finaliza qualquer stream ativo
+
+    // Reconfigura e tenta reiniciar o stream
+    if (!Firebase.RTDB.beginStream(&firebaseData, databasePath.c_str())) {
+        Serial.println("Falha ao reiniciar o stream: " + firebaseData.errorReason());
+    } else {
+        Serial.println("Stream reiniciado com sucesso.");
+    }
+     streamReiniciado = true; // Sucesso no reinício
+}
+
 void tiposBots()
 {
-    if (!Firebase.RTDB.readStream(&firebaseData))
-    {
-        Serial.println("Erro no stream do Realtime Database. Tentando reconectar...");
-        Firebase.RTDB.endStream(&firebaseData);
-        if (Firebase.RTDB.beginStream(&firebaseData, databasePath.c_str()))
-        {
-            Serial.println("Stream reconectado.");
+      if (!Firebase.RTDB.readStream(&firebaseData)) {
+        if (!streamReiniciado) { // Só tenta reiniciar se ainda não foi reiniciado
+            Serial.println("Stream desconectado. Tentando reiniciar...");
+            reiniciarStream();
         }
-        else
-        {
-            Serial.println("Erro ao reconectar stream: " + firebaseData.errorReason());
-        }
-        return;
+        return; // Aguarde a próxima iteração do loop para evitar processamento excessivo
     }
 
     if (!firebaseData.streamAvailable())
         return;
-
+    streamReiniciado = false;
     String jsonData = firebaseData.to<String>();
     String dataPath = firebaseData.dataPath();
     Serial.println("Dados recebidos: " + jsonData);
+         
+    if (dataPath == "/keeplive") { // Certifique-se de que o caminho está correto
+        // Extraia o valor do campo 'atualizado' recebido
+        int startIndex = jsonData.indexOf("\"hora\":\"") + 7;
+        int endIndex = jsonData.indexOf("\"", startIndex);
+        String horarioAtualizado = jsonData.substring(startIndex, endIndex);
+
+        Serial.println("Hora atualizada recebida: " + horarioAtualizado);
+        // Aqui você pode usar o valor recebido como necessário
+    }
+
 
     for (int i = 0; i < 5; i++)
     {
@@ -223,7 +239,7 @@ void setup()
             wifiConnected = false;
         }
     }
- Serial.println("cheguedsajdsa");
+    Serial.println("cheguedsajdsa");
     // Configuração do Firebase
     config.api_key = API_KEY;
     config.database_url = DATABASE_URL; // Adicione esta linha
@@ -234,7 +250,6 @@ void setup()
     Firebase.begin(&config, &auth);
     Firebase.reconnectWiFi(true);
 
-   
     FirebaseJson content;
     content.set("fields/espId/stringValue", espUniqueId);
 
@@ -318,52 +333,3 @@ void loop()
 
     delay(100); // Pequeno delay para evitar loops excessivos
 }
-
-// Função para monitorar o status do token
-// void tokenStatusCallback(TokenInfo info)
-// {
-//     Serial.printf("Token info: tipo = %s, status = %s\n", getTokenType(info).c_str(), getTokenStatus(info).c_str());
-// }
-
-// // Funções auxiliares para obter o tipo e status do token
-// String getTokenType(TokenInfo info)
-// {
-//     switch (info.type)
-//     {
-//     case token_type_undefined:
-//         return "Undefined";
-//     case token_type_legacy_token:
-//         return "Legacy token";
-//     case token_type_id_token:
-//         return "ID token";
-//     case token_type_custom_token:
-//         return "Custom token";
-//     case token_type_oauth2_access_token:
-//         return "OAuth2 access token";
-//     default:
-//         return "Unknown";
-//     }
-// }
-
-// String getTokenStatus(TokenInfo info)
-// {
-//     switch (info.status)
-//     {
-//     case token_status_uninitialized:
-//         return "Uninitialized";
-//     case token_status_on_initialize:
-//         return "On initialize";
-//     case token_status_on_signing:
-//         return "On signing";
-//     case token_status_on_request:
-//         return "On request";
-//     case token_status_on_refresh:
-//         return "On refresh";
-//     case token_status_ready:
-//         return "Ready";
-//     case token_status_error:
-//         return "Error";
-//     default:
-//         return "Unknown";
-//     }
-// }
