@@ -1,4 +1,23 @@
 #include <Arduino.h>
+// #include <ESPAsyncWebServer.h>
+// Configuração do Firebase
+
+
+
+String horaAtivacao = "";
+String horaDesativacao = "";
+String horaAtivacao2 = "";
+String horaDesativacao2 = "";
+String horaAtivacao3 = "";
+String horaDesativacao3 = "";
+String horaAtivacao4 = "";
+String horaDesativacao4 = "";
+String horaAtivacao5 = "";
+String horaDesativacao5 = "";
+String horarioAtual = "";
+
+bool ethernetConnected = false, wifiConnected = false;
+byte mac[] = {0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED};
 
 int tempoClick = 200;
 bool leitura[] = {0, 0, 0, 0, 0};
@@ -9,20 +28,19 @@ int reles[] = {33, 32, 14, 16, 15};
 #define BTN_CONFIG 17
 bool res;
 
-class Reles
-{
+class Reles {
 public:
-    int btn; //== botao verde
-    int pino; //== rele
-    int status;
-    int contador;
-    const char* caminhoArquivo;
+    int btn; // Botão associado
+    int pino; // Pino do relé
+    int status; // Status atual (ativo/inativo)
+    int contador; // Contador de eventos
+    const char* caminhoArquivo; // Caminho do arquivo no SPIFFS
+    String horaAtivacao; // Hora de ativação
+    String horaDesativacao; // Hora de desativação
 
     Reles(int pino, int btn)
-    {
-        this->btn = btn;
-        this->pino = pino;
-    }
+        : pino(pino), btn(btn), status(0), contador(0), caminhoArquivo(nullptr),
+          horaAtivacao(""), horaDesativacao("") {}
 };
 
 Reles rele[5] = {
@@ -31,13 +49,12 @@ Reles rele[5] = {
     Reles(14, 39),
     Reles(16, 35),
     Reles(15, 2)
-    };
+};
 
+int rele1;
+int rele2;
+int rele3;
+int rele4;
+int rele5;
 
-int rele1 = 0;
-int rele2 = 0;
-int rele3 = 0;
-int rele4 = 0;
-int rele5 = 0;
-#define FORMAT_SPIFFS_IF_FAILED true
 bool streamReiniciado = false;

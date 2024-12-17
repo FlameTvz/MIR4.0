@@ -4,7 +4,10 @@
 #include <SPIFFS.h>
 #include <NTPClient.h>
 #include <WiFiManager.h>
+#include <WebServer.h>
+#include <ESPAsyncWebServer.h>
 #include "vars.h"
+#include "WebServer.h"
 
 // Configuração do Firebase
 const char *API_KEY = "AIzaSyCPV9DQPoPoEXSkDYazAehyugOhKm4NhQ0";
@@ -12,38 +15,19 @@ const char *DATABASE_URL = "https://poised-bot-443613-p6-default-rtdb.firebaseio
 const char *EMAIL = "leandro.lopes@inovanex.com.br";
 const char *EMAIL_PASSWORD = "Inova123NEX";
 const char *PROJECT_ID = "poised-bot-443613-p6";
+
 // Definição dos objetos do Firebase
 char espUniqueId[13]; // Variable to hold the ESP32 unique ID
 String databasePath;  // Variable to hold the database path
 FirebaseData firebaseData;
 FirebaseAuth auth;
 FirebaseConfig config;
-
 WiFiUDP ntpUDP;
+
+
 NTPClient timeClient(ntpUDP, "pool.ntp.org", -3 * 3600, 60000);
-
-String horaAtivacao = "";
-String horaDesativacao = "";
-String horaAtivacao2 = "";
-String horaDesativacao2 = "";
-String horaAtivacao3 = "";
-String horaDesativacao3 = "";
-String horaAtivacao4 = "";
-String horaDesativacao4 = "";
-String horaAtivacao5 = "";
-String horaDesativacao5 = "";
-String horarioAtual = "";
-
-bool ethernetConnected = false, wifiConnected = false;
-byte mac[] = {0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED};
 WiFiServer wifiServer(80);
 
-// // Declaração das funções auxiliares
-// String getTokenType(TokenInfo info);
-// String getTokenStatus(TokenInfo info);
-
-// Declaração da função tokenStatusCallback
-// void tokenStatusCallback(TokenInfo info);
 
 void salvarDados(const char *caminho, int dados)
 {
@@ -55,6 +39,57 @@ void salvarDados(const char *caminho, int dados)
     }
     arquivo.print(dados);
     arquivo.close();
+}
+
+String getTokenType(TokenInfo info)
+{
+    switch (info.type)
+    {
+    case token_type_undefined:
+        return "undefined";
+    case token_type_legacy_token:
+        return "legacy token";
+    case token_type_id_token:
+        return "id token";
+    case token_type_custom_token:
+        return "custom token";
+    case token_type_oauth2_access_token:
+        return "OAuth2.0 access token";
+    default:
+        return "unknown";
+    }
+}
+
+String getTokenStatus(TokenInfo info)
+{
+    switch (info.status)
+    {
+    case token_status_uninitialized:
+        return "uninitialized";
+    case token_status_on_signing:
+        return "on signing";
+    case token_status_on_request:
+        return "on request";
+    case token_status_on_refresh:
+        return "on refresh";
+    case token_status_ready:
+        return "ready";
+    case token_status_error:
+        return "error";
+    default:
+        return "unknown";
+    }
+}
+
+void tokenStatusCallback(TokenInfo info)
+{
+    Serial.printf("Token Info: type = %s, status = %s\n",
+                  getTokenType(info).c_str(), getTokenStatus(info).c_str());
+
+    if (info.status == token_status_error)
+    {
+        Serial.printf("Token error: %s\n", info.error.message.c_str());
+    }
 }
 
 void registrarEvento(const char *releStr, const char *evento)
@@ -97,6 +132,7 @@ void registrarEvento(const char *releStr, const char *evento)
         Serial.println(firebaseData.errorReason());
     }
 }
+
 
 void toggleRele(int pino)
 {
@@ -158,16 +194,19 @@ void enviarheartbeat()
     }
 }
 
-void atualizarEstadoRele(int pino, int estado)
+void atualizarEstadoRele(int rele, int estado)
 {
-    String relePath = databasePath + "/reles/" + String(pino);
+    // Construa o caminho correto para o campo dentro de "rele1" ou "rele2"
+    String relePath = "/IdsESP/" + String(espUniqueId) + "/rele" + String(rele) + "/status";
+
+    // Atualiza o campo "status" no caminho especificado
     if (Firebase.RTDB.setInt(&firebaseData, relePath.c_str(), estado))
     {
-        Serial.println("Estado do rele " + String(pino) + " atualizado para: " + String(estado));
+        Serial.println("Estado do rele " + String(rele) + " atualizado para: " + String(estado));
     }
     else
     {
-        Serial.println("Erro ao atualizar estado do rele " + String(pino) + ": " + firebaseData.errorReason());
+        Serial.println("Erro ao atualizar estado do rele " + String(rele) + ": " + firebaseData.errorReason());
     }
 }
 
@@ -330,25 +369,30 @@ void setup()
     if (!ethernetConnected)
     {
         WiFiManager wm;
-        bool res = wm.autoConnect("AutoConnectAP", "password"); // Nome e senha do ponto de acesso
-        if (res)
+        bool res = wm.autoConnect("AutoConnectAP", "password"); // Nome e senha do ponto de acesso Wi-Fi
+        if (!res)
         {
-            Serial.println("Conectado ao WiFi via WiFiManager.");
+            Serial.println("Falha ao conectar via WiFiManager.");
+            // ESP.restart();
             wifiConnected = true;
         }
         else
         {
-            Serial.println("Falha ao conectar via WiFiManager.");
+            Serial.println("Wi-Fi conectado via WiFiManager.");
+            Serial.print("Endereço IP: ");
+            Serial.println(WiFi.localIP());
             wifiConnected = false;
         }
     }
+
+
     Serial.println("cheguedsajdsa");
     // Configuração do Firebase
     config.api_key = API_KEY;
     config.database_url = DATABASE_URL; // Adicione esta linha
     auth.user.email = EMAIL;
     auth.user.password = EMAIL_PASSWORD;
-    // config.token_status_callback = tokenStatusCallback;
+    config.token_status_callback = tokenStatusCallback;
 
     Firebase.begin(&config, &auth);
     Firebase.reconnectWiFi(true);
@@ -387,7 +431,8 @@ void setup()
         return;
     }
 
-    Serial.println("Sistema de arquivos montado com sucesso!");
+    
+
 }
 
 void leRele()
@@ -411,17 +456,18 @@ void entradaNaSaida()
         {
             Serial.printf("Botão do relé %d está pressionado (HIGH)\n", i);
             digitalWrite(rele[i].pino, HIGH);
+            registrarEvento(("Relé " + String(i + 1)).c_str(), "Ativado");
             algumON = 1;
         }
     }
-    if(algumON == 1){
-    //         //*************************** */
-    //         display.clearDisplay();
-    //         display.fillScreen(WHITE);
-    //         display.display();
-    //         //*************************** */
-            delay(tempoClick);
-
+    if (algumON == 1)
+    {
+        //         //*************************** */
+        //         display.clearDisplay();
+        //         display.fillScreen(WHITE);
+        //         display.display();
+        //         //*************************** */
+        delay(tempoClick);
     }
     // else{
     //         //*************************** */
@@ -448,22 +494,22 @@ void entradaNaSaida()
             }
             if (i == 1)
             {
-                rele1++;
+                rele2++;
                 salvarDados("/rele2.txt", rele2);
             }
             if (i == 2)
             {
-                rele1++;
+                rele3++;
                 salvarDados("/rele3.txt", rele3);
             }
             if (i == 3)
             {
-                rele1++;
+                rele4++;
                 salvarDados("/rele4.txt", rele4);
             }
             if (i == 4)
             {
-                rele1++;
+                rele5++;
                 salvarDados("/rele5.txt", rele5);
             }
         }
@@ -516,8 +562,8 @@ void loop()
         {
             digitalWrite(rele[0].pino, HIGH);
             Serial.println("Relé 1 ativado!");
-            atualizarEstadoRele(rele[0].pino, true);
-            // registrarEvento(rele[0].pino, "Ativado");
+            atualizarEstadoRele(1, true);
+            registrarEvento("Relé 1", "Ativado");
         }
 
         // Desativar relé no horário correto
@@ -525,8 +571,8 @@ void loop()
         {
             digitalWrite(rele[0].pino, LOW);
             Serial.println("Relé 1 desativado!");
-            atualizarEstadoRele(rele[0].pino, false);
-            // registrarEvento(rele[0].pino, "Desativado");
+            atualizarEstadoRele(1, false);
+            registrarEvento("Relé 1", "Desativado");
         }
     }
 
@@ -547,9 +593,9 @@ void loop()
         if (abs(horaAtualSegundos2 - horarioAtivacaoSegundos2) <= toleranciaSegundos2)
         {
             digitalWrite(rele[1].pino, HIGH);
-            Serial.println("Relé 1 ativado!");
-            atualizarEstadoRele(rele[1].pino, true);
-            // registrarEvento(rele[1].pino, "Ativado");
+            Serial.println("Relé 2 ativado!");
+            atualizarEstadoRele(2, true);
+            registrarEvento("Relé 2", "Ativado");
         }
 
         // Desativar relé no horário correto
@@ -557,8 +603,8 @@ void loop()
         {
             digitalWrite(rele[1].pino, LOW);
             Serial.println("Relé 1 desativado!");
-            atualizarEstadoRele(rele[1].pino, false);
-            // registrarEvento(rele[1].pino, "Desativado");
+            atualizarEstadoRele(2, false);
+            registrarEvento("Relé 2", "Desativado");
         }
     }
 
@@ -580,8 +626,8 @@ void loop()
         {
             digitalWrite(rele[2].pino, HIGH);
             Serial.println("Relé 1 ativado!");
-            atualizarEstadoRele(rele[2].pino, true);
-            // registrarEvento(rele[2].pino, "Ativado");
+            atualizarEstadoRele(3, true);
+            registrarEvento("Relé 3", "Ativado");
         }
 
         // Desativar relé no horário correto
@@ -589,8 +635,8 @@ void loop()
         {
             digitalWrite(rele[2].pino, LOW);
             Serial.println("Relé 1 desativado!");
-            atualizarEstadoRele(rele[2].pino, false);
-            // registrarEvento(rele[2].pino, "Desativado");
+            atualizarEstadoRele(3, false);
+            registrarEvento("Relé 3", "Desativado");
         }
     }
 
@@ -612,8 +658,8 @@ void loop()
         {
             digitalWrite(rele[3].pino, HIGH);
             Serial.println("Relé 1 ativado!");
-            atualizarEstadoRele(rele[3].pino, true);
-            // registrarEvento(rele[3].pino, "Ativado");
+            atualizarEstadoRele(4, true);
+            registrarEvento("Relé 4", "Ativado");
         }
 
         // Desativar relé no horário correto
@@ -621,8 +667,8 @@ void loop()
         {
             digitalWrite(rele[3].pino, LOW);
             Serial.println("Relé 1 desativado!");
-            atualizarEstadoRele(rele[3].pino, false);
-            // registrarEvento(rele[3].pino, "Desativado");
+            atualizarEstadoRele(4, false);
+            registrarEvento("Relé 4", "Desativado");
         }
     }
 
@@ -644,8 +690,8 @@ void loop()
         {
             digitalWrite(rele[4].pino, HIGH);
             Serial.println("Relé 1 ativado!");
-            atualizarEstadoRele(rele[4].pino, true);
-            // registrarEvento(rele[4].pino, "Ativado");
+            atualizarEstadoRele(5, true);
+            registrarEvento("Relé 5", "Ativado");
         }
 
         // Desativar relé no horário correto
@@ -653,8 +699,8 @@ void loop()
         {
             digitalWrite(rele[4].pino, LOW);
             Serial.println("Relé 1 desativado!");
-            atualizarEstadoRele(rele[4].pino, false);
-            // registrarEvento(rele[4].pino, "Desativado");
+            atualizarEstadoRele(5, false);
+            registrarEvento("Relé 5", "Desativado");
         }
     }
 
