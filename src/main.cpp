@@ -1,33 +1,11 @@
-#include <Arduino.h>
-#include <Ethernet.h>
-#include <Firebase_ESP_Client.h>
-#include <SPIFFS.h>
-#include <NTPClient.h>
-#include <WiFiManager.h>
-#include <WebServer.h>
-#include <ESPAsyncWebServer.h>
 #include "vars.h"
-#include "WebServer.h"
+#include <ESPAsyncWebServer.h>
+#include <DNSServer.h>
+#include <WiFi.h>
 
-// Configuração do Firebase
-const char *API_KEY = "AIzaSyCPV9DQPoPoEXSkDYazAehyugOhKm4NhQ0";
-const char *DATABASE_URL = "https://poised-bot-443613-p6-default-rtdb.firebaseio.com/";
-const char *EMAIL = "leandro.lopes@inovanex.com.br";
-const char *EMAIL_PASSWORD = "Inova123NEX";
-const char *PROJECT_ID = "poised-bot-443613-p6";
-
-// Definição dos objetos do Firebase
-char espUniqueId[13]; // Variable to hold the ESP32 unique ID
-String databasePath;  // Variable to hold the database path
-FirebaseData firebaseData;
-FirebaseAuth auth;
-FirebaseConfig config;
-WiFiUDP ntpUDP;
-
-
-NTPClient timeClient(ntpUDP, "pool.ntp.org", -3 * 3600, 60000);
-WiFiServer wifiServer(80);
-
+const byte DNS_PORT = 53;
+DNSServer dnsServer;
+AsyncWebServer server(80); // Porta padrão HTTP
 
 void salvarDados(const char *caminho, int dados)
 {
@@ -133,6 +111,86 @@ void registrarEvento(const char *releStr, const char *evento)
     }
 }
 
+void leRele()
+{
+    bool valor;
+    for (int i = 0; i < qtdRele; i++)
+    {
+        leitura[i] = digitalRead(rele[i].btn);
+        // Serial.println(leitura[i]);
+    }
+}
+
+void entradaNaSaida()
+{
+    bool algumON = 0;
+    leRele();
+    for (int i = 0; i < qtdRele; i++)
+    {
+        // Serial.println(i);
+        if (leitura[i] == 1)
+        {
+            Serial.printf("Botão do relé %d está pressionado (HIGH)\n", i);
+            digitalWrite(rele[i].pino, HIGH);
+            registrarEvento(("Relé " + String(i + 1)).c_str(), "Ativado");
+            algumON = 1;
+        }
+    }
+    if (algumON == 1)
+    {
+        //         //*************************** */
+        //         display.clearDisplay();
+        //         display.fillScreen(WHITE);
+        //         display.display();
+        //         //*************************** */
+        delay(tempoClick);
+    }
+    // else{
+    //         //*************************** */
+    //         display.clearDisplay();
+    //         display.fillScreen(BLACK);
+    //         display.display();
+    //         //*************************** */
+    // }
+    for (int i = 0; i < qtdRele; i++)
+    {
+        if (leitura[i] == 1)
+        {
+            digitalWrite(rele[i].pino, LOW);
+        }
+    }
+    for (int i = 0; i < qtdRele; i++)
+    {
+        if (leitura[i] == 1)
+        {
+            if (i == 0)
+            {
+                rele1++;
+                salvarDados("/rele1.txt", rele1);
+            }
+            if (i == 1)
+            {
+                rele2++;
+                salvarDados("/rele2.txt", rele2);
+            }
+            if (i == 2)
+            {
+                rele3++;
+                salvarDados("/rele3.txt", rele3);
+            }
+            if (i == 3)
+            {
+                rele4++;
+                salvarDados("/rele4.txt", rele4);
+            }
+            if (i == 4)
+            {
+                rele5++;
+                salvarDados("/rele5.txt", rele5);
+            }
+        }
+    }
+}
 
 void toggleRele(int pino)
 {
@@ -331,6 +389,349 @@ void tiposBots()
     }
 }
 
+void verificarHorarioReles(String ativacao, String desativacao, int pino, int releNum)
+{
+    if (ativacao.length() == 8 && desativacao.length() == 8)
+    {
+        int horaAtualSeg = timeClient.getHours() * 3600 + timeClient.getMinutes() * 60 + timeClient.getSeconds();
+        int horaAtivacaoSeg = ativacao.substring(0, 2).toInt() * 3600 +
+                              ativacao.substring(3, 5).toInt() * 60 + ativacao.substring(6, 8).toInt();
+        int horaDesativacaoSeg = desativacao.substring(0, 2).toInt() * 3600 +
+                                 desativacao.substring(3, 5).toInt() * 60 + desativacao.substring(6, 8).toInt();
+
+        int tolerancia = 2; // Tolerância de 2 segundos
+        if (abs(horaAtualSeg - horaAtivacaoSeg) <= tolerancia)
+        {
+            digitalWrite(pino, HIGH);
+            Serial.printf("Relé %d ativado!\n", releNum);
+            atualizarEstadoRele(releNum, true);
+            registrarEvento(("Relé " + String(releNum)).c_str(), "Ativado");
+        }
+        if (abs(horaAtualSeg - horaDesativacaoSeg) <= tolerancia)
+        {
+            digitalWrite(pino, LOW);
+            Serial.printf("Relé %d desativado!\n", releNum);
+            atualizarEstadoRele(releNum, false);
+            registrarEvento(("Relé " + String(releNum)).c_str(), "Desativado");
+        }
+    }
+}
+
+const char *htmlPage PROGMEM = R"rawliteral(
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Configuração Wi-Fi</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f2f2f2;
+            color: #333;
+            text-align: center;
+            margin: 0;
+            padding: 0;
+        }
+        h1 {
+            margin-top: 20px;
+            color: #444;
+        }
+        form {
+            display: inline-block;
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            margin-top: 20px;
+        }
+        input[type="text"], input[type="password"] {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        input[type="submit"] {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        input[type="submit"]:hover {
+            background-color: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <h1>Configuração Wi-Fi</h1>
+    <form action="/connect" method="post">
+        <label for="ssid">Nome da Rede (SSID):</label>
+        <input type="text" id="ssid" name="ssid" required>
+
+        <label for="password">Senha:</label>
+        <input type="password" id="password" name="password" required>
+
+        <input type="submit" value="Conectar">
+    </form>
+</body>
+</html>
+)rawliteral";
+
+void startWiFiManager()
+{
+    WiFi.mode(WIFI_AP_STA);
+    const char *ssid = "ESP32_Config";
+    const char *password = "12345678";
+
+    Serial.println("Iniciando modo Access Point...");
+    WiFi.softAP(ssid, password);
+
+    IPAddress apIP(192, 168, 4, 1); // IP padrão do portal
+    dnsServer.start(DNS_PORT, "*", apIP);
+
+    // Página principal
+    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
+              {
+                  request->send_P(200, "text/html", htmlPage); // Servir a página HTML
+              });
+
+    // Configuração Wi-Fi
+    server.on("/connect", HTTP_POST, [](AsyncWebServerRequest *request)
+              {
+    String ssid, password;
+
+    if (request->hasParam("ssid", true)) ssid = request->getParam("ssid", true)->value();
+    if (request->hasParam("password", true)) password = request->getParam("password", true)->value();
+
+    if (!ssid.isEmpty()) {
+        Serial.println("Tentando conectar à rede: " + ssid);
+        WiFi.begin(ssid.c_str(), password.c_str());
+
+        delay(2000); // Pequena pausa para iniciar a conexão
+        if (WiFi.status() == WL_CONNECTED) {
+            Serial.println("Conectado com sucesso! IP: " + WiFi.localIP().toString());
+
+            // Salvar SSID e senha na SPIFFS
+            File wifiConfig = SPIFFS.open("/wifi_config.txt", FILE_WRITE);
+            if (wifiConfig) {
+                wifiConfig.println(ssid);
+                wifiConfig.println(password);
+                wifiConfig.close();
+                Serial.println("Configuração Wi-Fi salva.");
+            } else {
+                Serial.println("Erro ao salvar configuração Wi-Fi.");
+            }
+
+            request->send(200, "text/plain", "Conectado com sucesso! Reinicie o ESP32.");
+        } else {
+            Serial.println("Falha na conexão.");
+            request->send(200, "text/plain", "Falha ao conectar. Tente novamente.");
+        }
+    } });
+
+    server.begin();
+    Serial.println("Servidor HTTP iniciado!");
+
+    while (WiFi.status() != WL_CONNECTED)
+    {
+        dnsServer.processNextRequest(); // Processa os pacotes DNS
+        delay(100);
+    }
+}
+
+String paginaPrincipal()
+{
+    String html = R"rawliteral(
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Controle de Relés</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; margin: 0; padding: 0; background-color: #f4f4f9; }
+        h1 { color: #333; }
+        .rele { margin: 10px 0; padding: 10px; border: 1px solid #ccc; border-radius: 5px; background-color: #fff; display: inline-block; }
+        button { padding: 10px 20px; margin: 5px; background-color: #007BFF; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        button:hover { background-color: #0056b3; }
+    </style>
+
+</head>
+<body>
+    <h1>Controle de Relés</h1>
+    <div>
+        <!-- Controles para os relés -->
+        %CONTROLES%
+    </div>
+    <h2>Configurar Horários</h2>
+    <form action="/configurar" method="POST">
+        <label for="rele">Relé:</label>
+        <input type="number" id="rele" name="rele" min="1" max="5" required><br>
+        <label for="horaAtivacao">Hora de Ativação (HH:MM:SS):</label>
+        <input type="text" id="horaAtivacao" name="horaAtivacao" oninput="formatTimeInput(this)" placeholder="HH:MM:SS" required><br><br>
+
+        <label for="horaDesativacao">Hora de Desativação (HH:MM:SS):</label>
+        <input type="text" id="horaDesativacao" name="horaDesativacao" oninput="formatTimeInput(this)" placeholder="HH:MM:SS" required><br><br>
+
+        <button type="submit">Configurar</button>
+    </form>
+    <script>
+        function controleRele(rele, acao) {
+            fetch(`/controle?rele=${rele}&acao=${acao}`)
+                .then(response => response.text())
+                .then(data => alert(data));
+        }
+        // Função para aplicar máscara no campo HH:MM:SS
+        function formatTimeInput(input) {
+            let value = input.value.replace(/[^0-9]/g, ""); // Remove caracteres não numéricos
+            if (value.length > 6) value = value.slice(0, 6); // Limita a 6 dígitos
+
+            if (value.length > 4) {
+                input.value = value.slice(0, 2) + ":" + value.slice(2, 4) + ":" + value.slice(4, 6);
+            } else if (value.length > 2) {
+                input.value = value.slice(0, 2) + ":" + value.slice(2, 4);
+            } else {
+                input.value = value;
+            }
+        }
+    </script>
+</body>
+</html>
+)rawliteral";
+
+    String controles = "";
+    for (int i = 0; i < 5; i++)
+    {
+        controles += "<div class='rele'>";
+        controles += "<h2>Relé " + String(i + 1) + "</h2>";
+        controles += "<p>Estado: " + String(rele[i].status ? "Ligado" : "Desligado") + "</p>";
+        controles += "<button onclick='controleRele(" + String(i + 1) + ", \"ligar\")'>Ligar</button>";
+        controles += "<button onclick='controleRele(" + String(i + 1) + ", \"desligar\")'>Desligar</button>";
+        controles += "</div>";
+    }
+    html.replace("%CONTROLES%", controles);
+    return html;
+}
+
+void configurarWebServer()
+{
+    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
+              { request->send(200, "text/html", paginaPrincipal()); });
+
+    server.on("/controle", HTTP_GET, [](AsyncWebServerRequest *request)
+              {
+        if (request->hasParam("rele") && request->hasParam("acao")) {
+            int releIdx = request->getParam("rele")->value().toInt() - 1;
+            String acao = request->getParam("acao")->value();
+            if (releIdx >= 0 && releIdx < 5) {
+                if (acao == "ligar") {
+                    digitalWrite(rele[releIdx].pino, HIGH);
+                    rele[releIdx].status = 1;
+                } else if (acao == "desligar") {
+                    digitalWrite(rele[releIdx].pino, LOW);
+                    rele[releIdx].status = 0;
+                }
+                request->send(200, "text/plain", "OK");
+            } else {
+                request->send(400, "text/plain", "Relé inválido");
+            }
+        } else {
+            request->send(400, "text/plain", "Parâmetros inválidos");
+        } });
+
+    server.on("/configurar", HTTP_POST, [](AsyncWebServerRequest *request)
+              {
+        if (request->hasParam("rele", true) && request->hasParam("horaAtivacao", true) && request->hasParam("horaDesativacao", true)) {
+            int releIdx = request->getParam("rele", true)->value().toInt() - 1;
+            if (releIdx >= 0 && releIdx < 5) {
+                rele[releIdx].horaAtivacao = request->getParam("horaAtivacao", true)->value();
+                rele[releIdx].horaDesativacao = request->getParam("horaDesativacao", true)->value();
+                request->send(200, "text/plain", "Horários configurados no Web Server");
+            } else {
+                request->send(400, "text/plain", "Relé inválido");
+            }
+        } else {
+            request->send(400, "text/plain", "Parâmetros inválidos");
+        } });
+
+    server.begin();
+}
+
+void loadWiFiConfig()
+{
+    if (SPIFFS.exists("/wifi_config.txt"))
+    {
+        File wifiConfig = SPIFFS.open("/wifi_config.txt", FILE_READ);
+        if (wifiConfig)
+        {
+            String ssid = wifiConfig.readStringUntil('\n');
+            String password = wifiConfig.readStringUntil('\n');
+            ssid.trim();
+            password.trim();
+            wifiConfig.close();
+
+            if (!ssid.isEmpty())
+            {
+                Serial.println("Carregando configuração Wi-Fi da SPIFFS...");
+                WiFi.begin(ssid.c_str(), password.c_str());
+
+                unsigned long startTime = millis();
+                while (WiFi.status() != WL_CONNECTED && millis() - startTime < 15000)
+                {
+                    delay(500);
+                    Serial.print(".");
+                }
+
+                if (WiFi.status() == WL_CONNECTED)
+                {
+                    Serial.println("\nConectado ao Wi-Fi com sucesso!");
+                    Serial.println("IP: " + WiFi.localIP().toString());
+                }
+                else
+                {
+                    Serial.println("\nFalha ao conectar ao Wi-Fi com as configurações salvas.");
+                }
+            }
+        }
+    }
+    else
+    {
+        Serial.println("Nenhuma configuração Wi-Fi salva encontrada.");
+    }
+}
+
+String getHoraAtual()
+{
+    return timeClient.getFormattedTime(); // Ajuste para o método que você usa para obter o horário
+}
+
+// Loop para controle de horários configurados no Web Server
+
+void controlarRelesWebServer()
+{
+    String horaAtual = getHoraAtual();
+    for (int i = 0; i < 5; i++)
+    {
+        if (!rele[i].horaAtivacao.isEmpty() && horaAtual == rele[i].horaAtivacao)
+        {
+            digitalWrite(rele[i].pino, HIGH);
+            rele[i].status = 1;
+            Serial.printf("Relé %d ativado pelo Web Server.\n", i + 1);
+        }
+        if (!rele[i].horaDesativacao.isEmpty() && horaAtual == rele[i].horaDesativacao)
+        {
+            digitalWrite(rele[i].pino, LOW);
+            rele[i].status = 0;
+            Serial.printf("Relé %d desativado pelo Web Server.\n", i + 1);
+        }
+    }
+}
+
 void setup()
 {
     Serial.begin(115200);
@@ -339,8 +740,6 @@ void setup()
 
     uint64_t chipid = ESP.getEfuseMac();
     sprintf(espUniqueId, "%04X%08X", (uint16_t)(chipid >> 32), (uint32_t)chipid);
-    Serial.print("ID único do ESP32: ");
-    Serial.println(espUniqueId);
 
     // Construir o caminho do banco de dados usando o ID único
     databasePath = "/IdsESP/" + String(espUniqueId);
@@ -352,7 +751,17 @@ void setup()
         pinMode(rele[i].btn, INPUT);
     }
 
-    // Tentar conectar ao Ethernet primeiro com DHCP
+    // Inicializar o SPIFFS
+    if (!SPIFFS.begin())
+    {
+        Serial.println("Falha ao montar o sistema de arquivos!");
+        return;
+    }
+
+    // Carregar configuração de Wi-Fi
+    loadWiFiConfig();
+
+    // Verificar conexão com Ethernet ou Wi-Fi
     if (Ethernet.begin(mac) == 0)
     { // Tenta obter IP via DHCP
         Serial.println("Falha ao conectar ao Ethernet. Tentando conectar via WiFi...");
@@ -365,28 +774,20 @@ void setup()
         ethernetConnected = true;
     }
 
-    // Se Ethernet falhar, tentar conectar via WiFiManager
+    // Se Ethernet falhar, verificar Wi-Fi
     if (!ethernetConnected)
     {
-        WiFiManager wm;
-        bool res = wm.autoConnect("AutoConnectAP", "password"); // Nome e senha do ponto de acesso Wi-Fi
-        if (!res)
+        if (WiFi.status() != WL_CONNECTED)
         {
-            Serial.println("Falha ao conectar via WiFiManager.");
-            // ESP.restart();
-            wifiConnected = true;
+            Serial.println("Não conectado ao Wi-Fi. Iniciando modo de configuração Wi-Fi...");
+            startWiFiManager(); // Entra no modo de configuração Wi-Fi
         }
         else
         {
-            Serial.println("Wi-Fi conectado via WiFiManager.");
-            Serial.print("Endereço IP: ");
-            Serial.println(WiFi.localIP());
-            wifiConnected = false;
+            Serial.println("Wi-Fi conectado com as configurações salvas.");
         }
     }
 
-
-    Serial.println("cheguedsajdsa");
     // Configuração do Firebase
     config.api_key = API_KEY;
     config.database_url = DATABASE_URL; // Adicione esta linha
@@ -396,7 +797,6 @@ void setup()
 
     Firebase.begin(&config, &auth);
     Firebase.reconnectWiFi(true);
-
     FirebaseJson content;
     content.set("fields/espId/stringValue", espUniqueId);
 
@@ -425,99 +825,15 @@ void setup()
         Serial.println("Stream do Realtime Database iniciado com sucesso.");
     }
 
-    if (!SPIFFS.begin())
-    {
-        Serial.println("Falha ao montar o sistema de arquivos!");
-        return;
-    }
+    // Configuração do Web Server
+    configurarWebServer();
 
-    
-
-}
-
-void leRele()
-{
-    bool valor;
-    for (int i = 0; i < qtdRele; i++)
-    {
-        leitura[i] = digitalRead(rele[i].btn);
-        // Serial.println(leitura[i]);
-    }
-}
-
-void entradaNaSaida()
-{
-    bool algumON = 0;
-    leRele();
-    for (int i = 0; i < qtdRele; i++)
-    {
-        // Serial.println(i);
-        if (leitura[i] == 1)
-        {
-            Serial.printf("Botão do relé %d está pressionado (HIGH)\n", i);
-            digitalWrite(rele[i].pino, HIGH);
-            registrarEvento(("Relé " + String(i + 1)).c_str(), "Ativado");
-            algumON = 1;
-        }
-    }
-    if (algumON == 1)
-    {
-        //         //*************************** */
-        //         display.clearDisplay();
-        //         display.fillScreen(WHITE);
-        //         display.display();
-        //         //*************************** */
-        delay(tempoClick);
-    }
-    // else{
-    //         //*************************** */
-    //         display.clearDisplay();
-    //         display.fillScreen(BLACK);
-    //         display.display();
-    //         //*************************** */
-    // }
-    for (int i = 0; i < qtdRele; i++)
-    {
-        if (leitura[i] == 1)
-        {
-            digitalWrite(rele[i].pino, LOW);
-        }
-    }
-    for (int i = 0; i < qtdRele; i++)
-    {
-        if (leitura[i] == 1)
-        {
-            if (i == 0)
-            {
-                rele1++;
-                salvarDados("/rele1.txt", rele1);
-            }
-            if (i == 1)
-            {
-                rele2++;
-                salvarDados("/rele2.txt", rele2);
-            }
-            if (i == 2)
-            {
-                rele3++;
-                salvarDados("/rele3.txt", rele3);
-            }
-            if (i == 3)
-            {
-                rele4++;
-                salvarDados("/rele4.txt", rele4);
-            }
-            if (i == 4)
-            {
-                rele5++;
-                salvarDados("/rele5.txt", rele5);
-            }
-        }
-    }
+    Serial.println("Setup concluído.");
 }
 
 void loop()
 {
+    controlarRelesWebServer();
     tiposBots();
     entradaNaSaida();
     static unsigned long lastHeartBeat = 0;
@@ -543,166 +859,11 @@ void loop()
         Serial.println("Hora Atual: " + horarioAtual);
     }
 
-    // Verificar horários
-    if (horaAtivacao.length() == 8 && horaDesativacao.length() == 8)
-    {
-        int horaAtualSegundos = timeClient.getHours() * 3600 + timeClient.getMinutes() * 60 + timeClient.getSeconds();
-        int horarioAtivacaoSegundos = horaAtivacao.substring(0, 2).toInt() * 3600 +
-                                      horaAtivacao.substring(3, 5).toInt() * 60 +
-                                      horaAtivacao.substring(6, 8).toInt();
-
-        int horarioDesativacaoSegundos = horaDesativacao.substring(0, 2).toInt() * 3600 +
-                                         horaDesativacao.substring(3, 5).toInt() * 60 +
-                                         horaDesativacao.substring(6, 8).toInt();
-
-        int toleranciaSegundos = 2; // Tolerância de 2 segundos
-
-        // Ativar relé no horário correto
-        if (abs(horaAtualSegundos - horarioAtivacaoSegundos) <= toleranciaSegundos)
-        {
-            digitalWrite(rele[0].pino, HIGH);
-            Serial.println("Relé 1 ativado!");
-            atualizarEstadoRele(1, true);
-            registrarEvento("Relé 1", "Ativado");
-        }
-
-        // Desativar relé no horário correto
-        if (abs(horaAtualSegundos - horarioDesativacaoSegundos) <= toleranciaSegundos)
-        {
-            digitalWrite(rele[0].pino, LOW);
-            Serial.println("Relé 1 desativado!");
-            atualizarEstadoRele(1, false);
-            registrarEvento("Relé 1", "Desativado");
-        }
-    }
-
-    if (horaAtivacao2.length() == 8 && horaDesativacao2.length() == 8)
-    {
-        int horaAtualSegundos2 = timeClient.getHours() * 3600 + timeClient.getMinutes() * 60 + timeClient.getSeconds();
-        int horarioAtivacaoSegundos2 = horaAtivacao2.substring(0, 2).toInt() * 3600 +
-                                       horaAtivacao2.substring(3, 5).toInt() * 60 +
-                                       horaAtivacao2.substring(6, 8).toInt();
-
-        int horarioDesativacaoSegundos2 = horaDesativacao2.substring(0, 2).toInt() * 3600 +
-                                          horaDesativacao2.substring(3, 5).toInt() * 60 +
-                                          horaDesativacao2.substring(6, 8).toInt();
-
-        int toleranciaSegundos2 = 2; // Tolerância de 2 segundos
-
-        // Ativar relé no horário correto
-        if (abs(horaAtualSegundos2 - horarioAtivacaoSegundos2) <= toleranciaSegundos2)
-        {
-            digitalWrite(rele[1].pino, HIGH);
-            Serial.println("Relé 2 ativado!");
-            atualizarEstadoRele(2, true);
-            registrarEvento("Relé 2", "Ativado");
-        }
-
-        // Desativar relé no horário correto
-        if (abs(horaAtualSegundos2 - horarioDesativacaoSegundos2) <= toleranciaSegundos2)
-        {
-            digitalWrite(rele[1].pino, LOW);
-            Serial.println("Relé 1 desativado!");
-            atualizarEstadoRele(2, false);
-            registrarEvento("Relé 2", "Desativado");
-        }
-    }
-
-    if (horaAtivacao3.length() == 8 && horaDesativacao3.length() == 8)
-    {
-        int horaAtualSegundos3 = timeClient.getHours() * 3600 + timeClient.getMinutes() * 60 + timeClient.getSeconds();
-        int horarioAtivacaoSegundos3 = horaAtivacao3.substring(0, 2).toInt() * 3600 +
-                                       horaAtivacao3.substring(3, 5).toInt() * 60 +
-                                       horaAtivacao3.substring(6, 8).toInt();
-
-        int horarioDesativacaoSegundos3 = horaDesativacao3.substring(0, 2).toInt() * 3600 +
-                                          horaDesativacao3.substring(3, 5).toInt() * 60 +
-                                          horaDesativacao3.substring(6, 8).toInt();
-
-        int toleranciaSegundos3 = 2; // Tolerância de 2 segundos
-
-        // Ativar relé no horário correto
-        if (abs(horaAtualSegundos3 - horarioAtivacaoSegundos3) <= toleranciaSegundos3)
-        {
-            digitalWrite(rele[2].pino, HIGH);
-            Serial.println("Relé 1 ativado!");
-            atualizarEstadoRele(3, true);
-            registrarEvento("Relé 3", "Ativado");
-        }
-
-        // Desativar relé no horário correto
-        if (abs(horaAtualSegundos3 - horarioDesativacaoSegundos3) <= toleranciaSegundos3)
-        {
-            digitalWrite(rele[2].pino, LOW);
-            Serial.println("Relé 1 desativado!");
-            atualizarEstadoRele(3, false);
-            registrarEvento("Relé 3", "Desativado");
-        }
-    }
-
-    if (horaAtivacao4.length() == 8 && horaDesativacao4.length() == 8)
-    {
-        int horaAtualSegundos4 = timeClient.getHours() * 3600 + timeClient.getMinutes() * 60 + timeClient.getSeconds();
-        int horarioAtivacaoSegundos4 = horaAtivacao4.substring(0, 2).toInt() * 3600 +
-                                       horaAtivacao4.substring(3, 5).toInt() * 60 +
-                                       horaAtivacao4.substring(6, 8).toInt();
-
-        int horarioDesativacaoSegundos4 = horaDesativacao4.substring(0, 2).toInt() * 3600 +
-                                          horaDesativacao4.substring(3, 5).toInt() * 60 +
-                                          horaDesativacao4.substring(6, 8).toInt();
-
-        int toleranciaSegundos4 = 2; // Tolerância de 2 segundos
-
-        // Ativar relé no horário correto
-        if (abs(horaAtualSegundos4 - horarioAtivacaoSegundos4) <= toleranciaSegundos4)
-        {
-            digitalWrite(rele[3].pino, HIGH);
-            Serial.println("Relé 1 ativado!");
-            atualizarEstadoRele(4, true);
-            registrarEvento("Relé 4", "Ativado");
-        }
-
-        // Desativar relé no horário correto
-        if (abs(horaAtualSegundos4 - horarioDesativacaoSegundos4) <= toleranciaSegundos4)
-        {
-            digitalWrite(rele[3].pino, LOW);
-            Serial.println("Relé 1 desativado!");
-            atualizarEstadoRele(4, false);
-            registrarEvento("Relé 4", "Desativado");
-        }
-    }
-
-    if (horaAtivacao5.length() == 8 && horaDesativacao5.length() == 8)
-    {
-        int horaAtualSegundos5 = timeClient.getHours() * 3600 + timeClient.getMinutes() * 60 + timeClient.getSeconds();
-        int horarioAtivacaoSegundos5 = horaAtivacao5.substring(0, 2).toInt() * 3600 +
-                                       horaAtivacao5.substring(3, 5).toInt() * 60 +
-                                       horaAtivacao5.substring(6, 8).toInt();
-
-        int horarioDesativacaoSegundos5 = horaDesativacao5.substring(0, 2).toInt() * 3600 +
-                                          horaDesativacao5.substring(3, 5).toInt() * 60 +
-                                          horaDesativacao5.substring(6, 8).toInt();
-
-        int toleranciaSegundos5 = 2; // Tolerância de 2 segundos
-
-        // Ativar relé no horário correto
-        if (abs(horaAtualSegundos5 - horarioAtivacaoSegundos5) <= toleranciaSegundos5)
-        {
-            digitalWrite(rele[4].pino, HIGH);
-            Serial.println("Relé 1 ativado!");
-            atualizarEstadoRele(5, true);
-            registrarEvento("Relé 5", "Ativado");
-        }
-
-        // Desativar relé no horário correto
-        if (abs(horaAtualSegundos5 - horarioDesativacaoSegundos5) <= toleranciaSegundos5)
-        {
-            digitalWrite(rele[4].pino, LOW);
-            Serial.println("Relé 1 desativado!");
-            atualizarEstadoRele(5, false);
-            registrarEvento("Relé 5", "Desativado");
-        }
-    }
+    verificarHorarioReles(horaAtivacao, horaDesativacao, rele[0].pino, 1);
+    verificarHorarioReles(horaAtivacao2, horaDesativacao2, rele[1].pino, 2);
+    verificarHorarioReles(horaAtivacao3, horaDesativacao3, rele[2].pino, 3);
+    verificarHorarioReles(horaAtivacao4, horaDesativacao4, rele[3].pino, 4);
+    verificarHorarioReles(horaAtivacao5, horaDesativacao5, rele[4].pino, 5);
 
     delay(100); // Pequeno delay para evitar loops excessivos
 }

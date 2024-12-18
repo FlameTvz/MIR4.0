@@ -1,7 +1,25 @@
 #include <Arduino.h>
-// #include <ESPAsyncWebServer.h>
-// Configuração do Firebase
+#include <Ethernet.h>
+#include <Firebase_ESP_Client.h>
+#include <SPIFFS.h>
+#include <NTPClient.h>
+#include <ESPAsyncWebServer.h>
 
+const char *API_KEY = "AIzaSyCPV9DQPoPoEXSkDYazAehyugOhKm4NhQ0";
+const char *DATABASE_URL = "https://poised-bot-443613-p6-default-rtdb.firebaseio.com/";
+const char *EMAIL = "leandro.lopes@inovanex.com.br";
+const char *EMAIL_PASSWORD = "Inova123NEX";
+const char *PROJECT_ID = "poised-bot-443613-p6";
+
+// Definição dos objetos do Firebase
+char espUniqueId[13]; // Variable to hold the ESP32 unique ID
+String databasePath;  // Variable to hold the database path
+FirebaseData firebaseData;
+FirebaseAuth auth;
+FirebaseConfig config;
+WiFiUDP ntpUDP;
+
+NTPClient timeClient(ntpUDP, "pool.ntp.org", -3 * 3600, 60000);
 
 
 String horaAtivacao = "";
