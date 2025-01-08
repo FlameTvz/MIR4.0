@@ -341,19 +341,23 @@ void enviarheartbeat()
  *
  * @return Nenhum valor de retorno.
  */
-void atualizarEstadoRele(int rele, int estado)
+void atualizarEstadoRele(int pino, int estado, int numRele)
 {
-    // Construa o caminho correto para o campo dentro de "rele1" ou "rele2"
-    String relePath = "/IdsESP/" + String(espUniqueId) + "/rele" + String(rele) + "/status";
+    // Exemplo: /IdsESP/<espUniqueId>/rele1/status, caso numRele == 1
+    String relePath = "/IdsESP/" + String(espUniqueId) + "/rele" + String(numRele) + "/status";
 
     // Atualiza o campo "status" no caminho especificado
     if (Firebase.RTDB.setInt(&firebaseData, relePath.c_str(), estado))
     {
-        Serial.println("Estado do rele " + String(rele) + " atualizado para: " + String(estado));
+        Serial.println("Estado do Rele " + String(numRele) 
+                        + " (pino " + String(pino) + ") atualizado para: " 
+                        + String(estado));
     }
     else
     {
-        Serial.println("Erro ao atualizar estado do rele " + String(rele) + ": " + firebaseData.errorReason());
+        Serial.println("Erro ao atualizar estado do Rele " + String(numRele) 
+                        + " (pino " + String(pino) + "): " 
+                        + firebaseData.errorReason());
     }
 }
 
@@ -452,13 +456,15 @@ void tiposBots()
             {
                 digitalWrite(rele[i].pino, HIGH);
                 registrarEvento(("Relé " + String(i + 1)).c_str(), "Ativado");
-                atualizarEstadoRele(rele[i].pino, 1);
+                // atualizarEstadoRele(rele[i].pino, 1);
+                atualizarEstadoRele(rele[i].pino, true, i + 1);
             }
             else if (jsonData.indexOf("\"status\":false") != -1)
             {
                 digitalWrite(rele[i].pino, LOW);
                 registrarEvento(("Relé " + String(i + 1)).c_str(), "Desativado");
-                atualizarEstadoRele(rele[i].pino, 0);
+                // atualizarEstadoRele(rele[i].pino, 0);
+                atualizarEstadoRele(rele[i].pino, false, i + 1);
             }
         }
     }
@@ -516,6 +522,55 @@ void tiposBots()
         horaDesativacao5 = processarHorarios(dataPath, jsonData, "\"horaDesativacao\":", "/rele5");
         Serial.println("Horário de desativação capturado: " + horaDesativacao5);
     }
+
+    if(jsonData.indexOf("\"tipoBotao\":\"switch") != -1 && dataPath == "/rele1"){
+        digitalWrite(rele[0].pino, HIGH);
+        delay(200);
+        digitalWrite(rele[0].pino, LOW);
+        registrarEvento("Relé 1", "Ativado e Desativado");
+    }
+    if (jsonData.indexOf("\"tipoBotao\":\"switch") != -1 && dataPath == "/rele2"){
+        digitalWrite(rele[1].pino, HIGH);
+        delay(200);
+        digitalWrite(rele[1].pino, LOW);
+        registrarEvento("Relé 2", "Ativado e Desativado");
+    }
+    if (jsonData.indexOf("\"tipoBotao\":\"switch") != -1 && dataPath == "/rele3"){
+        digitalWrite(rele[2].pino, HIGH);
+        delay(200);
+        digitalWrite(rele[2].pino, LOW);
+        registrarEvento("Relé 3", "Ativado e Desativado");
+    }
+    if (jsonData.indexOf("\"tipoBotao\":\"switch") != -1 && dataPath == "/rele4"){
+        digitalWrite(rele[3].pino, HIGH);
+        delay(200);
+        digitalWrite(rele[3].pino, LOW);
+        registrarEvento("Relé 4", "Ativado e Desativado");
+    }
+    if (jsonData.indexOf("\"tipoBotao\":\"switch") != -1 && dataPath == "/rele5"){
+        digitalWrite(rele[4].pino, HIGH);
+        delay(200);
+        digitalWrite(rele[4].pino, LOW);
+        registrarEvento("Relé 5", "Ativado e Desativado");
+    }
+    
+
+}
+
+void atualizarEstadoRele2(int rele, int estado)
+{
+    // Construa o caminho correto para o campo dentro de "rele1" ou "rele2"
+    String relePath = "/IdsESP/" + String(espUniqueId) + "/rele" + String(rele) + "/status";
+
+    // Atualiza o campo "status" no caminho especificado
+    if (Firebase.RTDB.setInt(&firebaseData, relePath.c_str(), estado))
+    {
+        Serial.println("Estado do rele " + String(rele) + " atualizado para: " + String(estado));
+    }
+    else
+    {
+        Serial.println("Erro ao atualizar estado do rele " + String(rele) + ": " + firebaseData.errorReason());
+    }
 }
 
 /**
@@ -530,7 +585,7 @@ void tiposBots()
  * @param pino The pin number associated with the relay.
  * @param releNum The relay number for identification in logging.
  */
-void verificarHorarioReles(String ativacao, String desativacao, int pino, int releNum)
+void verificarHorarioReles(String ativacao, String desativacao, int pino, int releNum){
     if (ativacao.length() == 8 && desativacao.length() == 8)
     {
         int horaAtualSeg = timeClient.getHours() * 3600 + timeClient.getMinutes() * 60 + timeClient.getSeconds();
@@ -544,14 +599,14 @@ void verificarHorarioReles(String ativacao, String desativacao, int pino, int re
         {
             digitalWrite(pino, HIGH);
             Serial.printf("Relé %d ativado!\n", releNum);
-            atualizarEstadoRele(releNum, true);
+            atualizarEstadoRele2(releNum, true);
             registrarEvento(("Relé " + String(releNum)).c_str(), "Ativado");
         }
         if (abs(horaAtualSeg - horaDesativacaoSeg) <= tolerancia)
         {
             digitalWrite(pino, LOW);
             Serial.printf("Relé %d desativado!\n", releNum);
-            atualizarEstadoRele(releNum, false);
+            atualizarEstadoRele2(releNum, false);
             registrarEvento(("Relé " + String(releNum)).c_str(), "Desativado");
         }
     }
