@@ -7,6 +7,12 @@ const byte DNS_PORT = 53;
 DNSServer dnsServer;
 AsyncWebServer server(80); // Porta padrão HTTP
 
+/**
+ * Salva um valor numérico em um arquivo no sistema de arquivos SPIFFS.
+ *
+ * @param caminho Caminho do arquivo a ser salvo.
+ * @param dados Valor numérico a ser salvo.
+ */
 void salvarDados(const char *caminho, int dados)
 {
     File arquivo = SPIFFS.open(caminho, FILE_WRITE);
@@ -19,6 +25,13 @@ void salvarDados(const char *caminho, int dados)
     arquivo.close();
 }
 
+/**
+ * @brief Retorna o tipo do token como string.
+ *
+ * @param[in] info Informa es sobre o token.
+ *
+ * @return String com o tipo do token.
+ */
 String getTokenType(TokenInfo info)
 {
     switch (info.type)
@@ -38,6 +51,13 @@ String getTokenType(TokenInfo info)
     }
 }
 
+/**
+ * @brief Retorna o status do token como string.
+ *
+ * @param[in] info Informa es sobre o token.
+ *
+ * @return String com o status do token.
+ */
 String getTokenStatus(TokenInfo info)
 {
     switch (info.status)
@@ -59,6 +79,16 @@ String getTokenStatus(TokenInfo info)
     }
 }
 
+/**
+ * Callback function to handle and print token status information.
+ *
+ * This function takes a TokenInfo object and prints the token type and status
+ * using the Serial interface. If the token status is `token_status_error`,
+ * it additionally prints the error message associated with the token.
+ *
+ * @param info TokenInfo object containing details about the token type, status,
+ *             and any associated error message.
+ */
 void tokenStatusCallback(TokenInfo info)
 {
     Serial.printf("Token Info: type = %s, status = %s\n",
@@ -70,6 +100,12 @@ void tokenStatusCallback(TokenInfo info)
     }
 }
 
+/**
+ * Registra um evento no Firestore.
+ *
+ * @param releStr String que identifica o rel  (ex. "Rele 1")
+ * @param evento String que descreve o evento (ex. "ligado")
+ */
 void registrarEvento(const char *releStr, const char *evento)
 {
     FirebaseJson content;
@@ -111,6 +147,14 @@ void registrarEvento(const char *releStr, const char *evento)
     }
 }
 
+/**
+ * @brief Leitura dos estados dos bot es de controle dos rel s
+ *
+ * @details
+ * Essa fun o l  os estados dos bot es de controle dos rel s
+ * e os guarda no array leitura.
+ * @see leitura
+ */
 void leRele()
 {
     bool valor;
@@ -121,6 +165,13 @@ void leRele()
     }
 }
 
+/**
+ * Verifica se algum botão de relé está pressionado e, se sim, ativa o respectivo
+ * relé e registra o evento no Firestore.
+ *
+ * Também incrementa o contador de eventos de cada relé e salva o valor no
+ * arquivo respectivo no SPIFFS.
+ */
 void entradaNaSaida()
 {
     bool algumON = 0;
@@ -192,6 +243,16 @@ void entradaNaSaida()
     }
 }
 
+/**
+ * @brief Alterna o estado de um pino de sa da do rel 
+ * 
+ * @param pino N mero do pino a ser alterado
+ * 
+ * @details
+ *    Se o pino estiver em LOW, ele ser  alterado para HIGH e vice-versa.
+ *    Um delay de 200ms  adicionado para evitar ativa es m ltiplas r pidas.
+ *    Utilizado para controlar os rel s via HTTP.
+ */
 void toggleRele(int pino)
 {
     if (digitalRead(pino) == LOW)
@@ -205,6 +266,16 @@ void toggleRele(int pino)
     delay(200); // Evitar ativação múltipla rápida
 }
 
+/**
+ * Extrai o valor de uma chave JSON e ajusta o formato para HH:MM:SS se necessário.
+ *
+ * @param dataPath Caminho do dado recebido via Stream do Firebase.
+ * @param jsonData Conteúdo do JSON recebido.
+ * @param jsonKey Chave do valor que deve ser extraído.
+ * @param pathEsperado Caminho esperado que deve ser igual a dataPath.
+ *
+ * @return O valor extraído e formatado, ou uma string vazia se o caminho ou chave forem inválidos.
+ */
 String processarHorarios(String dataPath, String jsonData, String jsonKey, String pathEsperado)
 {
     if (dataPath != pathEsperado || jsonData.indexOf(jsonKey) == -1)
@@ -238,6 +309,15 @@ String processarHorarios(String dataPath, String jsonData, String jsonKey, Strin
     return horario;
 }
 
+/**
+ * Envia um HeartBeat (sinal de vida) para o Firebase Realtime Database.
+ *
+ * O HeartBeat é um sinal de vida que indica que o dispositivo ainda está ativo.
+ * Ele é enviado periodicamente para o Firebase e pode ser usado para monitorar
+ * a presença do dispositivo na rede.
+ *
+ * @return Nenhum valor de retorno.
+ */
 void enviarheartbeat()
 {
     String heartbeatPath = databasePath + "/heartbeat";
@@ -252,6 +332,15 @@ void enviarheartbeat()
     }
 }
 
+
+/**
+ * Atualiza o estado do rele especificado no Realtime Database.
+ *
+ * @param rele Número do relé a ser atualizado (1 ou 2).
+ * @param estado Novo estado do relé (0 = desativado, 1 = ativado).
+ *
+ * @return Nenhum valor de retorno.
+ */
 void atualizarEstadoRele(int rele, int estado)
 {
     // Construa o caminho correto para o campo dentro de "rele1" ou "rele2"
@@ -268,6 +357,20 @@ void atualizarEstadoRele(int rele, int estado)
     }
 }
 
+
+/**
+ * Função que lida com a leitura de dados recebidos via Stream do Firebase.
+ *
+ * Verifica se o stream está disponível e, se sim, extrai o valor do campo 'atualizado' recebido.
+ * Em seguida, verifica se o caminho recebido é igual a "/keeplive" e, se sim, imprime o horário atualizado recebido.
+ *
+ * Além disso, verifica se o caminho recebido é igual a "/releX" (onde X é o número do relé) e, se sim, extrai o valor do campo 'status' recebido e atualiza o estado do relé correspondente.
+ *
+ * Por fim, verifica se o caminho recebido é igual a "/releX" e o valor do campo 'horaAtivacao' ou 'horaDesativacao' foi alterado, e, se sim, atualiza o horário de ativação ou desativação do relé correspondente.
+ *
+ * @return Nenhum valor de retorno.
+ */
+/******  bdf903f3-cd84-4ccf-9f8f-29a6fd707fdb  *******/
 void reiniciarStream()
 {
     Firebase.RTDB.endStream(&firebaseData); // Finaliza qualquer stream ativo
@@ -282,8 +385,34 @@ void reiniciarStream()
         Serial.println("Stream reiniciado com sucesso.");
     }
     streamReiniciado = true; // Sucesso no reinício
-}
+/*************  ✨ Codeium Command ⭐  *************/
+/**
+ * Função que lida com a leitura de dados recebidos via Stream do Firebase.
+ *
+ * Verifica se o stream está disponível e, se sim, extrai o valor do campo 'atualizado' recebido.
+ * Em seguida, verifica se o caminho recebido é igual a "/keeplive" e, se sim, imprime o horário atualizado recebido.
+ *
+ * Além disso, verifica se o caminho recebido é igual a "/releX" (onde X é o número do relé) e, se sim, extrai o valor do campo 'status' recebido e atualiza o estado do relé correspondente.
+ *
+ * Por fim, verifica se o caminho recebido é igual a "/releX" e o valor do campo 'horaAtivacao' ou 'horaDesativacao' foi alterado, e, se sim, atualiza o horário de ativação ou desativação do relé correspondente.
+ *
+ * @return Nenhum valor de retorno.
+ */
+/******  dbfb5ebf-b8f3-4b89-a324-2a6862f6bd15  *******/}
 
+
+/**
+ * Função que lida com a leitura de dados recebidos via Stream do Firebase.
+ *
+ * Verifica se o stream está disponível e, se sim, extrai o valor do campo 'atualizado' recebido.
+ * Em seguida, verifica se o caminho recebido é igual a "/keeplive" e, se sim, imprime o horário atualizado recebido.
+ *
+ * Além disso, verifica se o caminho recebido é igual a "/releX" (onde X é o número do relé) e, se sim, extrai o valor do campo 'status' recebido e atualiza o estado do relé correspondente.
+ *
+ * Por fim, verifica se o caminho recebido é igual a "/releX" e o valor do campo 'horaAtivacao' ou 'horaDesativacao' foi alterado, e, se sim, atualiza o horário de ativação ou desativação do relé correspondente.
+ *
+ * @return Nenhum valor de retorno.
+ */
 void tiposBots()
 {
     if (!Firebase.RTDB.readStream(&firebaseData))
@@ -389,8 +518,19 @@ void tiposBots()
     }
 }
 
+/**
+ *
+ * This function compares the current time with specified activation and deactivation times.
+ * If the current time is within a 2-second tolerance of the activation time, the relay is activated.
+ * If the current time is within a 2-second tolerance of the deactivation time, the relay is deactivated.
+ * It logs events for both activation and deactivation.
+ *
+ * @param ativacao The activation time in the format "HH:MM:SS".
+ * @param desativacao The deactivation time in the format "HH:MM:SS".
+ * @param pino The pin number associated with the relay.
+ * @param releNum The relay number for identification in logging.
+ */
 void verificarHorarioReles(String ativacao, String desativacao, int pino, int releNum)
-{
     if (ativacao.length() == 8 && desativacao.length() == 8)
     {
         int horaAtualSeg = timeClient.getHours() * 3600 + timeClient.getMinutes() * 60 + timeClient.getSeconds();
@@ -482,6 +622,19 @@ const char *htmlPage PROGMEM = R"rawliteral(
 </html>
 )rawliteral";
 
+/**
+ * Inicia o modo Access Point no ESP32 e configura o servidor HTTP para
+ * fornecer uma página de configuração Wi-Fi.
+ *
+ * A página de configuração é servida na porta 80 e fornece inputs para o
+ * nome da rede (SSID) e a senha. Após a submissão da página, o ESP32
+ * tenta se conectar à rede especificada e salva a configuração Wi-Fi na
+ * SPIFFS em um arquivo chamado "wifi_config.txt".
+ *
+ * Caso a conexão seja bem-sucedida, o ESP32 reinicia automaticamente e
+ * tenta se conectar à rede novamente. Caso contrário, a página de
+ * configuração é novamente servida com uma mensagem de erro.
+ */
 void startWiFiManager()
 {
     WiFi.mode(WIFI_AP_STA);
@@ -544,6 +697,14 @@ void startWiFiManager()
     }
 }
 
+/**
+ * Gera a página principal do controle de relés.
+ * 
+ * A página inclui controles para os 5 relés e um formulário para configurar 
+ * horários de ativação e desativação.
+ * 
+ * @return String com o conteúdo HTML da página.
+ */
 String paginaPrincipal()
 {
     String html = R"rawliteral(
@@ -584,7 +745,6 @@ String paginaPrincipal()
         function controleRele(rele, acao) {
             fetch(`/controle?rele=${rele}&acao=${acao}`)
                 .then(response => response.text())
-                .then(data => alert(data));
         }
         // Função para aplicar máscara no campo HH:MM:SS
         function formatTimeInput(input) {
@@ -618,6 +778,19 @@ String paginaPrincipal()
     return html;
 }
 
+/**
+ * Configures the web server routes for handling HTTP requests.
+ *
+ * Sets up the following routes:
+ * - "/" (GET): Serves the main relay control page.
+ * - "/controle" (GET): Controls relay states based on query parameters "rele" and "acao".
+ *   - "rele" specifies the relay number (1 to 5).
+ *   - "acao" specifies the action ("ligar" or "desligar").
+ *   Responds with "OK" if successful, or an error message if parameters are invalid.
+ * - "/configurar" (POST): Configures activation and deactivation times for relays based on the
+ *   provided parameters "rele", "horaAtivacao", and "horaDesativacao".
+ *   Responds with confirmation if successful, or an error message if parameters are invalid.
+ */
 void configurarWebServer()
 {
     server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
@@ -662,6 +835,14 @@ void configurarWebServer()
     server.begin();
 }
 
+
+/**
+ * Carrega a configuração Wi-Fi salva na SPIFFS em um arquivo chamado
+ * "wifi_config.txt". Se o arquivo existir, tenta se conectar à rede
+ * especificada. Se a conexão for bem-sucedida, imprime o IP atribuído.
+ * Se a conexão falhar ou o arquivo não existir, imprime uma mensagem de
+ * erro.
+ */
 void loadWiFiConfig()
 {
     if (SPIFFS.exists("/wifi_config.txt"))
@@ -705,6 +886,12 @@ void loadWiFiConfig()
     }
 }
 
+
+/**
+ * Retorna a hora atual formatada como uma string no padrão HH:MM:SS.
+ * 
+ * @return String com a hora atual formatada.
+ */
 String getHoraAtual()
 {
     return timeClient.getFormattedTime(); // Ajuste para o método que você usa para obter o horário
@@ -712,6 +899,18 @@ String getHoraAtual()
 
 // Loop para controle de horários configurados no Web Server
 
+/**
+ * Verifica se a hora atual é igual às horas configuradas para cada um dos
+ * 5 relés e, se sim, ativa ou desativa o relé de acordo com a configuração.
+ *
+ * A função acessa o horário atual com o método getHoraAtual() e itera sobre
+ * os objetos do vetor "rele". Para cada relé, verifica se a hora atual é igual
+ * às horas de ativação ou desativação configuradas. Caso seja, ativa ou desativa
+ * o relé de acordo com a configuração.
+ *
+ * A função é chamada no loop principal do programa, logo após a configuração
+ * do Web Server.
+ */
 void controlarRelesWebServer()
 {
     String horaAtual = getHoraAtual();
@@ -732,6 +931,17 @@ void controlarRelesWebServer()
     }
 }
 
+/**
+ * Configures and initializes the hardware and network settings for the system.
+ *
+ * - Initializes the serial communication and configures the button and relay pins.
+ * - Retrieves the unique ESP32 chip ID and constructs the database path.
+ * - Mounts the SPIFFS filesystem and loads the Wi-Fi configuration.
+ * - Attempts to connect to Ethernet and, if unsuccessful, switches to Wi-Fi.
+ * - Initializes Firebase with authentication and registers the ESP32 ID in Firestore.
+ * - Starts a stream in the Firebase Realtime Database for data synchronization.
+ * - Sets up the web server for handling HTTP requests.
+ */
 void setup()
 {
     Serial.begin(115200);
@@ -827,8 +1037,6 @@ void setup()
 
     // Configuração do Web Server
     configurarWebServer();
-
-    Serial.println("Setup concluído.");
 }
 
 void loop()
