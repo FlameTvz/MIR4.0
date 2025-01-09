@@ -25,6 +25,15 @@ void salvarDados(const char *caminho, int dados)
     arquivo.close();
 }
 
+struct RelePulse
+{
+    bool ativo = false;       // Indica se o pulso está ativo
+    unsigned long inicio = 0; // Momento de início do pulso
+    int releIdx = -1;         // Índice do relé associado
+};
+
+RelePulse pulseAtual;
+
 /**
  * @brief Retorna o tipo do token como string.
  *
@@ -244,10 +253,10 @@ void entradaNaSaida()
 }
 
 /**
- * @brief Alterna o estado de um pino de sa da do rel 
- * 
+ * @brief Alterna o estado de um pino de sa da do rel
+ *
  * @param pino N mero do pino a ser alterado
- * 
+ *
  * @details
  *    Se o pino estiver em LOW, ele ser  alterado para HIGH e vice-versa.
  *    Um delay de 200ms  adicionado para evitar ativa es m ltiplas r pidas.
@@ -332,7 +341,6 @@ void enviarheartbeat()
     }
 }
 
-
 /**
  * Atualiza o estado do rele especificado no Realtime Database.
  *
@@ -349,18 +357,13 @@ void atualizarEstadoRele(int pino, int estado, int numRele)
     // Atualiza o campo "status" no caminho especificado
     if (Firebase.RTDB.setInt(&firebaseData, relePath.c_str(), estado))
     {
-        Serial.println("Estado do Rele " + String(numRele) 
-                        + " (pino " + String(pino) + ") atualizado para: " 
-                        + String(estado));
+        Serial.println("Estado do Rele " + String(numRele) + " (pino " + String(pino) + ") atualizado para: " + String(estado));
     }
     else
     {
-        Serial.println("Erro ao atualizar estado do Rele " + String(numRele) 
-                        + " (pino " + String(pino) + "): " 
-                        + firebaseData.errorReason());
+        Serial.println("Erro ao atualizar estado do Rele " + String(numRele) + " (pino " + String(pino) + "): " + firebaseData.errorReason());
     }
 }
-
 
 /**
  * Função que lida com a leitura de dados recebidos via Stream do Firebase.
@@ -389,21 +392,20 @@ void reiniciarStream()
         Serial.println("Stream reiniciado com sucesso.");
     }
     streamReiniciado = true; // Sucesso no reinício
-/*************  ✨ Codeium Command ⭐  *************/
-/**
- * Função que lida com a leitura de dados recebidos via Stream do Firebase.
- *
- * Verifica se o stream está disponível e, se sim, extrai o valor do campo 'atualizado' recebido.
- * Em seguida, verifica se o caminho recebido é igual a "/keeplive" e, se sim, imprime o horário atualizado recebido.
- *
- * Além disso, verifica se o caminho recebido é igual a "/releX" (onde X é o número do relé) e, se sim, extrai o valor do campo 'status' recebido e atualiza o estado do relé correspondente.
- *
- * Por fim, verifica se o caminho recebido é igual a "/releX" e o valor do campo 'horaAtivacao' ou 'horaDesativacao' foi alterado, e, se sim, atualiza o horário de ativação ou desativação do relé correspondente.
- *
- * @return Nenhum valor de retorno.
- */
+                             /*************  ✨ Codeium Command ⭐  *************/
+                             /**
+                              * Função que lida com a leitura de dados recebidos via Stream do Firebase.
+                              *
+                              * Verifica se o stream está disponível e, se sim, extrai o valor do campo 'atualizado' recebido.
+                              * Em seguida, verifica se o caminho recebido é igual a "/keeplive" e, se sim, imprime o horário atualizado recebido.
+                              *
+                              * Além disso, verifica se o caminho recebido é igual a "/releX" (onde X é o número do relé) e, se sim, extrai o valor do campo 'status' recebido e atualiza o estado do relé correspondente.
+                              *
+                              * Por fim, verifica se o caminho recebido é igual a "/releX" e o valor do campo 'horaAtivacao' ou 'horaDesativacao' foi alterado, e, se sim, atualiza o horário de ativação ou desativação do relé correspondente.
+                              *
+                              * @return Nenhum valor de retorno.
+                              */
 /******  dbfb5ebf-b8f3-4b89-a324-2a6862f6bd15  *******/}
-
 
 /**
  * Função que lida com a leitura de dados recebidos via Stream do Firebase.
@@ -523,38 +525,41 @@ void tiposBots()
         Serial.println("Horário de desativação capturado: " + horaDesativacao5);
     }
 
-    if(jsonData.indexOf("\"tipoBotao\":\"switch") != -1 && dataPath == "/rele1"){
+    if (jsonData.indexOf("\"tipoBotao\":\"switch") != -1 && dataPath == "/rele1")
+    {
         digitalWrite(rele[0].pino, HIGH);
         delay(200);
         digitalWrite(rele[0].pino, LOW);
         registrarEvento("Relé 1", "Ativado e Desativado");
     }
-    if (jsonData.indexOf("\"tipoBotao\":\"switch") != -1 && dataPath == "/rele2"){
+    if (jsonData.indexOf("\"tipoBotao\":\"switch") != -1 && dataPath == "/rele2")
+    {
         digitalWrite(rele[1].pino, HIGH);
         delay(200);
         digitalWrite(rele[1].pino, LOW);
         registrarEvento("Relé 2", "Ativado e Desativado");
     }
-    if (jsonData.indexOf("\"tipoBotao\":\"switch") != -1 && dataPath == "/rele3"){
+    if (jsonData.indexOf("\"tipoBotao\":\"switch") != -1 && dataPath == "/rele3")
+    {
         digitalWrite(rele[2].pino, HIGH);
         delay(200);
         digitalWrite(rele[2].pino, LOW);
         registrarEvento("Relé 3", "Ativado e Desativado");
     }
-    if (jsonData.indexOf("\"tipoBotao\":\"switch") != -1 && dataPath == "/rele4"){
+    if (jsonData.indexOf("\"tipoBotao\":\"switch") != -1 && dataPath == "/rele4")
+    {
         digitalWrite(rele[3].pino, HIGH);
         delay(200);
         digitalWrite(rele[3].pino, LOW);
         registrarEvento("Relé 4", "Ativado e Desativado");
     }
-    if (jsonData.indexOf("\"tipoBotao\":\"switch") != -1 && dataPath == "/rele5"){
+    if (jsonData.indexOf("\"tipoBotao\":\"switch") != -1 && dataPath == "/rele5")
+    {
         digitalWrite(rele[4].pino, HIGH);
         delay(200);
         digitalWrite(rele[4].pino, LOW);
         registrarEvento("Relé 5", "Ativado e Desativado");
     }
-    
-
 }
 
 void atualizarEstadoRele2(int rele, int estado)
@@ -585,7 +590,8 @@ void atualizarEstadoRele2(int rele, int estado)
  * @param pino The pin number associated with the relay.
  * @param releNum The relay number for identification in logging.
  */
-void verificarHorarioReles(String ativacao, String desativacao, int pino, int releNum){
+void verificarHorarioReles(String ativacao, String desativacao, int pino, int releNum)
+{
     if (ativacao.length() == 8 && desativacao.length() == 8)
     {
         int horaAtualSeg = timeClient.getHours() * 3600 + timeClient.getMinutes() * 60 + timeClient.getSeconds();
@@ -754,10 +760,10 @@ void startWiFiManager()
 
 /**
  * Gera a página principal do controle de relés.
- * 
- * A página inclui controles para os 5 relés e um formulário para configurar 
+ *
+ * A página inclui controles para os 5 relés e um formulário para configurar
  * horários de ativação e desativação.
- * 
+ *
  * @return String com o conteúdo HTML da página.
  */
 String paginaPrincipal()
@@ -799,8 +805,20 @@ String paginaPrincipal()
     <script>
         function controleRele(rele, acao) {
             fetch(`/controle?rele=${rele}&acao=${acao}`)
-                .then(response => response.text())
+                .then(response => response.text());
         }
+
+      function controleSwitch(rele) {
+    fetch(`/switch?rele=${rele}`)
+        .then(response => response.text())
+        .then(data => {
+            alert(data); // Mostra a mensagem do servidor
+        })
+        .catch(error => {
+            console.error('Erro:', error); // Log de erros
+        });
+}
+
         // Função para aplicar máscara no campo HH:MM:SS
         function formatTimeInput(input) {
             let value = input.value.replace(/[^0-9]/g, ""); // Remove caracteres não numéricos
@@ -827,9 +845,11 @@ String paginaPrincipal()
         controles += "<p>Estado: " + String(rele[i].status ? "Ligado" : "Desligado") + "</p>";
         controles += "<button onclick='controleRele(" + String(i + 1) + ", \"ligar\")'>Ligar</button>";
         controles += "<button onclick='controleRele(" + String(i + 1) + ", \"desligar\")'>Desligar</button>";
+        controles += "<button onclick='controleSwitch(" + String(i + 1) + ")'>Switch</button>"; // Botão Switch
         controles += "</div>";
     }
     html.replace("%CONTROLES%", controles);
+
     return html;
 }
 
@@ -887,9 +907,24 @@ void configurarWebServer()
             request->send(400, "text/plain", "Parâmetros inválidos");
         } });
 
+    server.on("/switch", HTTP_GET, [](AsyncWebServerRequest *request)
+              {
+    if (request->hasParam("rele")) {
+        int releIdx = request->getParam("rele")->value().toInt() - 1; // Índice do relé (0 a 4)
+        if (releIdx >= 0 && releIdx < qtdRele) {
+            digitalWrite(rele[releIdx].pino, HIGH); // Liga o relé
+            delay(200);                             // Aguarda 200ms
+            digitalWrite(rele[releIdx].pino, LOW);  // Desliga o relé
+            request->send(200, "text/plain", "Pulso de 200ms enviado para o relé " + String(releIdx + 1));
+        } else {
+            request->send(400, "text/plain", "Relé inválido");
+        }
+    } else {
+        request->send(400, "text/plain", "Parâmetro 'rele' ausente");
+    } });
+
     server.begin();
 }
-
 
 /**
  * Carrega a configuração Wi-Fi salva na SPIFFS em um arquivo chamado
@@ -941,10 +976,9 @@ void loadWiFiConfig()
     }
 }
 
-
 /**
  * Retorna a hora atual formatada como uma string no padrão HH:MM:SS.
- * 
+ *
  * @return String com a hora atual formatada.
  */
 String getHoraAtual()
@@ -1127,6 +1161,16 @@ void loop()
     verificarHorarioReles(horaAtivacao3, horaDesativacao3, rele[2].pino, 3);
     verificarHorarioReles(horaAtivacao4, horaDesativacao4, rele[3].pino, 4);
     verificarHorarioReles(horaAtivacao5, horaDesativacao5, rele[4].pino, 5);
+
+    if (pulseAtual.ativo)
+    {
+        if (millis() - pulseAtual.inicio >= 200)
+        {                                                     // Após 200ms
+            digitalWrite(rele[pulseAtual.releIdx].pino, LOW); // Desliga o relé
+            pulseAtual.ativo = false;                         // Finaliza o estado do pulso
+            registrarEvento(("Relé " + String(pulseAtual.releIdx + 1)).c_str(), "Ativado e Desativado");
+        }
+    }
 
     delay(100); // Pequeno delay para evitar loops excessivos
 }
