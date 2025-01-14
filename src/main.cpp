@@ -209,7 +209,7 @@ void entradaNaSaida()
         //         display.fillScreen(WHITE);
         //         display.display();
         //         //*************************** */
-        delay(tempoClick);
+        delay(tempoEntrada);
     }
     // else{
     //         //*************************** */
@@ -787,11 +787,14 @@ String paginaPrincipal()
         .rele { margin: 10px 0; padding: 10px; border: 1px solid #ccc; border-radius: 5px; background-color: #fff; display: inline-block; }
         button { padding: 10px 20px; margin: 5px; background-color: #007BFF; color: white; border: none; border-radius: 5px; cursor: pointer; }
         button:hover { background-color: #0056b3; }
+        .estado { font-weight: bold; padding: 5px 10px; border-radius: 5px; }
+        .estado.ligado { background-color: green; color: white; }
+        .estado.desligado { background-color: red; color: white; }
     </style>
 </head>
 <body>
     <h1>Controle de Relés</h1>
-    <div>
+    <div id="reles-container">
         <!-- Controles para os relés -->
         %CONTROLES%
     </div>
@@ -812,17 +815,30 @@ String paginaPrincipal()
     <input type="number" id="tempo" name="tempo" min="1" required>
     <button type="submit">Atualizar Tempo</button>
 </form>
+<h2>Configurar Tempo do Pulso da Entrada</h2>
+<form action="/configurarentrada" method="POST">
+    <label for="tempo">Tempo do Pulso da Entrada (ms):</label>
+    <input type="number" id="tempoEntrada" name="tempo" min="1" required>
+    <button type="submit">Atualizar Tempo</button>
+</form>
     <script>
         // Atualiza o status e tempo dos relés a cada 1 segundo
-        setInterval(() => {
+       setInterval(() => {
             fetch('/status')
                 .then(response => response.json())
                 .then(data => {
-                    for (let i = 0; i < 5; i++) {
-                        document.getElementById(`rele-status-${i}`).innerText = data.reles[i].status ? "Ligado" : "Desligado";
-                        document.getElementById(`rele-pulso-${i}`).innerText = `${data.reles[i].tempoPulso} ms`;
-                        document.getElementById(`rele-entrada-${i}`).innerText = `${data.reles[i].tempoEntrada} ms`;
-                    }
+                    data.reles.forEach((rele, index) => {
+                        const estadoEl = document.getElementById(`estado-rele-${index}`);
+                        if (rele.status) {
+                            estadoEl.textContent = "Ligado";
+                            estadoEl.classList.add("ligado");
+                            estadoEl.classList.remove("desligado");
+                        } else {
+                            estadoEl.textContent = "Desligado";
+                            estadoEl.classList.add("desligado");
+                            estadoEl.classList.remove("ligado");
+                        }
+                    });
                 });
         }, 1000);
 
@@ -845,12 +861,11 @@ String paginaPrincipal()
 )rawliteral";
 
     // Manter os controles já existentes
-    String controles = "";
-    for (int i = 0; i < 5; i++)
-    {
+      String controles = "";
+    for (int i = 0; i < 5; i++) {
         controles += "<div class='rele'>";
         controles += "<h2>Relé " + String(i + 1) + "</h2>";
-        controles += "<p>Estado: " + String(rele[i].status ? "Ligado" : "Desligado") + "</p>";
+        controles += "<p>Estado: <span id='estado-rele-" + String(i) + "' class='estado'></span></p>";
         controles += "<p>Tempo do Pulso: <span id='rele-pulso-" + String(i) + "'>0 ms</span></p>";
         controles += "<p>Tempo da Entrada: <span id='rele-entrada-" + String(i) + "'>0 ms</span></p>";
         controles += "<button onclick='fetch(`/controle?rele=" + String(i + 1) + "&acao=ligar`)'>Ligar</button>";
@@ -858,11 +873,9 @@ String paginaPrincipal()
         controles += "<button onclick='fetch(`/switch?rele=" + String(i + 1) + "`).then(response => response.text())'>Switch</button>";
         controles += "</div>";
     }
-
     html.replace("%CONTROLES%", controles);
-    html.replace("%STATUS%", controles);
-
     return html;
+
 }
 
 /**
@@ -883,8 +896,7 @@ void configurarWebServer()
     server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
               { request->send(200, "text/html", paginaPrincipal()); });
 
-    server.on("/controle", HTTP_GET, [](AsyncWebServerRequest *request)
-              {
+    server.on("/controle", HTTP_GET, [](AsyncWebServerRequest *request) {
         if (request->hasParam("rele") && request->hasParam("acao")) {
             int releIdx = request->getParam("rele")->value().toInt() - 1;
             String acao = request->getParam("acao")->value();
@@ -902,7 +914,8 @@ void configurarWebServer()
             }
         } else {
             request->send(400, "text/plain", "Parâmetros inválidos");
-        } });
+        }
+    });
 
     server.on("/configurar", HTTP_POST, [](AsyncWebServerRequest *request)
               {
@@ -941,32 +954,45 @@ void configurarWebServer()
         request->send(400, "text/plain", "Parâmetro 'rele' ausente");
     } });
 
-    server.on("/status", HTTP_GET, [](AsyncWebServerRequest *request)
-              {
-    String response = "{ \"reles\": [";
-    for (int i = 0; i < 5; i++) {
-        response += "{";
-        response += "\"status\": " + String(rele[i].status) + ",";
-        response += "\"tempoPulso\": " + String(tempoClick) + ",";
-        response += "\"tempoEntrada\": " + String(millis() - pulseAtual.inicio);
+    server.on("/status", HTTP_GET, [](AsyncWebServerRequest *request) {
+        String response = "{ \"reles\": [";
+        for (int i = 0; i < 5; i++) {
+            response += "{";
+            response += "\"status\": " + String(rele[i].status) + ",";
+            response += "\"tempoPulso\": " + String(tempoClick);
+            response += "}";
+            if (i < 4) response += ",";
+        }
+        response += "] }";
+        request->send(200, "application/json", response);
+    });
 
-        response += "}";
-        if (i < 4) response += ",";
-    }
-    response += "] }";
-    request->send(200, "application/json", response); });
-
-    server.on("/configurartempo", HTTP_POST, [](AsyncWebServerRequest *request)
+    server.on("/configurartempo", HTTP_POST, [](AsyncWebServerRequest *request) {
+        if (request->hasParam("tempo", true)) {
+            String tempoStr = request->getParam("tempo", true)->value();
+            int novoTempo = tempoStr.toInt();
+            if (novoTempo > 0) {
+                tempoClick = novoTempo;
+                Serial.println("Tempo do pulso atualizado para: " + String(tempoClick) + " ms");
+                request->redirect("/");
+            } else {
+                request->send(400, "text/plain", "Valor inválido para o tempo do pulso");
+            }
+        } else {
+            request->send(400, "text/plain", "Parâmetro 'tempo' ausente");
+        }
+    });
+    server.on("/configurarentrada", HTTP_POST, [](AsyncWebServerRequest *request)
               {
     if (request->hasParam("tempo", true)) {
         String tempoStr = request->getParam("tempo", true)->value();
         int novoTempo = tempoStr.toInt();
         if (novoTempo > 0) {
-            tempoClick = novoTempo;
-            Serial.println("Tempo do pulso atualizado para: " + String(tempoClick) + " ms");
-            request->redirect("/"); // Redireciona de volta para o índice
+            tempoEntrada = novoTempo;
+            Serial.println("Tempo do pulso da entrada atualizado para: " + String(tempoEntrada) + " ms");
+            request->redirect("/"); // Redireciona de volta para a página principal
         } else {
-            request->send(400, "text/plain", "Valor inválido para o tempo do pulso");
+            request->send(400, "text/plain", "Valor inválido para o tempo do pulso da entrada");
         }
     } else {
         request->send(400, "text/plain", "Parâmetro 'tempo' ausente");

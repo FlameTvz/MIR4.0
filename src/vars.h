@@ -76,4 +76,4 @@ int rele4;
 int rele5;
 
 bool streamReiniciado = false;
-
+int tempoEntrada = 200;
