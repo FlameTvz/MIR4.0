@@ -6,7 +6,13 @@
 const byte DNS_PORT = 53;
 DNSServer dnsServer;
 AsyncWebServer server(80); // Porta padrão HTTP
-
+struct SwitchTask
+{
+    bool ativo = false;
+    unsigned long inicio = 0;
+    int releIdx = -1;
+};
+SwitchTask switchAtual;
 /**
  * Salva um valor numérico em um arquivo no sistema de arquivos SPIFFS.
  *
@@ -782,7 +788,6 @@ String paginaPrincipal()
         button { padding: 10px 20px; margin: 5px; background-color: #007BFF; color: white; border: none; border-radius: 5px; cursor: pointer; }
         button:hover { background-color: #0056b3; }
     </style>
-
 </head>
 <body>
     <h1>Controle de Relés</h1>
@@ -790,34 +795,36 @@ String paginaPrincipal()
         <!-- Controles para os relés -->
         %CONTROLES%
     </div>
+   
     <h2>Configurar Horários</h2>
     <form action="/configurar" method="POST">
         <label for="rele">Relé:</label>
         <input type="number" id="rele" name="rele" min="1" max="5" required><br>
         <label for="horaAtivacao">Hora de Ativação (HH:MM:SS):</label>
         <input type="text" id="horaAtivacao" name="horaAtivacao" oninput="formatTimeInput(this)" placeholder="HH:MM:SS" required><br><br>
-
         <label for="horaDesativacao">Hora de Desativação (HH:MM:SS):</label>
         <input type="text" id="horaDesativacao" name="horaDesativacao" oninput="formatTimeInput(this)" placeholder="HH:MM:SS" required><br><br>
-
         <button type="submit">Configurar</button>
     </form>
+    <h2>Configurar Tempo do Pulso</h2>
+<form action="/configurartempo" method="POST">
+    <label for="tempo">Tempo do Pulso (ms):</label>
+    <input type="number" id="tempo" name="tempo" min="1" required>
+    <button type="submit">Atualizar Tempo</button>
+</form>
     <script>
-        function controleRele(rele, acao) {
-            fetch(`/controle?rele=${rele}&acao=${acao}`)
-                .then(response => response.text());
-        }
-
-      function controleSwitch(rele) {
-    fetch(`/switch?rele=${rele}`)
-        .then(response => response.text())
-        .then(data => {
-            alert(data); // Mostra a mensagem do servidor
-        })
-        .catch(error => {
-            console.error('Erro:', error); // Log de erros
-        });
-}
+        // Atualiza o status e tempo dos relés a cada 1 segundo
+        setInterval(() => {
+            fetch('/status')
+                .then(response => response.json())
+                .then(data => {
+                    for (let i = 0; i < 5; i++) {
+                        document.getElementById(`rele-status-${i}`).innerText = data.reles[i].status ? "Ligado" : "Desligado";
+                        document.getElementById(`rele-pulso-${i}`).innerText = `${data.reles[i].tempoPulso} ms`;
+                        document.getElementById(`rele-entrada-${i}`).innerText = `${data.reles[i].tempoEntrada} ms`;
+                    }
+                });
+        }, 1000);
 
         // Função para aplicar máscara no campo HH:MM:SS
         function formatTimeInput(input) {
@@ -837,18 +844,23 @@ String paginaPrincipal()
 </html>
 )rawliteral";
 
+    // Manter os controles já existentes
     String controles = "";
     for (int i = 0; i < 5; i++)
     {
         controles += "<div class='rele'>";
         controles += "<h2>Relé " + String(i + 1) + "</h2>";
         controles += "<p>Estado: " + String(rele[i].status ? "Ligado" : "Desligado") + "</p>";
-        controles += "<button onclick='controleRele(" + String(i + 1) + ", \"ligar\")'>Ligar</button>";
-        controles += "<button onclick='controleRele(" + String(i + 1) + ", \"desligar\")'>Desligar</button>";
-        controles += "<button onclick='controleSwitch(" + String(i + 1) + ")'>Switch</button>"; // Botão Switch
+        controles += "<p>Tempo do Pulso: <span id='rele-pulso-" + String(i) + "'>0 ms</span></p>";
+        controles += "<p>Tempo da Entrada: <span id='rele-entrada-" + String(i) + "'>0 ms</span></p>";
+        controles += "<button onclick='fetch(`/controle?rele=" + String(i + 1) + "&acao=ligar`)'>Ligar</button>";
+        controles += "<button onclick='fetch(`/controle?rele=" + String(i + 1) + "&acao=desligar`)'>Desligar</button>";
+        controles += "<button onclick='fetch(`/switch?rele=" + String(i + 1) + "`).then(response => response.text())'>Switch</button>";
         controles += "</div>";
     }
+
     html.replace("%CONTROLES%", controles);
+    html.replace("%STATUS%", controles);
 
     return html;
 }
@@ -912,10 +924,15 @@ void configurarWebServer()
     if (request->hasParam("rele")) {
         int releIdx = request->getParam("rele")->value().toInt() - 1; // Índice do relé (0 a 4)
         if (releIdx >= 0 && releIdx < qtdRele) {
-            digitalWrite(rele[releIdx].pino, HIGH); // Liga o relé
-            delay(200);                             // Aguarda 200ms
-            digitalWrite(rele[releIdx].pino, LOW);  // Desliga o relé
-            request->send(200, "text/plain", "Pulso de 200ms enviado para o relé " + String(releIdx + 1));
+            if (!switchAtual.ativo) {
+                digitalWrite(rele[releIdx].pino, HIGH); // Liga o relé
+                switchAtual.ativo = true;
+                switchAtual.inicio = millis(); // Marca o início do pulso
+                switchAtual.releIdx = releIdx;
+                request->send(200, "text/plain", "Pulso iniciado para o relé " + String(releIdx + 1));
+            } else {
+                request->send(400, "text/plain", "Outro pulso está em andamento. Tente novamente.");
+            }
         } else {
             request->send(400, "text/plain", "Relé inválido");
         }
@@ -923,6 +940,35 @@ void configurarWebServer()
         request->send(400, "text/plain", "Parâmetro 'rele' ausente");
     } });
 
+    server.on("/status", HTTP_GET, [](AsyncWebServerRequest *request)
+              {
+    String response = "{ \"reles\": [";
+    for (int i = 0; i < 5; i++) {
+        response += "{";
+        response += "\"status\": " + String(rele[i].status) + ",";
+        response += "\"tempoPulso\": " + String(tempoClick) + ",";
+        response += "\"tempoEntrada\": " + String(millis() - pulseAtual.inicio);
+
+        response += "}";
+        if (i < 4) response += ",";
+    }
+    response += "] }";
+    request->send(200, "application/json", response); });
+
+    server.on("/configurartempo", HTTP_POST, [](AsyncWebServerRequest *request)
+              {
+    if (request->hasParam("tempo", true)) {
+        String tempoStr = request->getParam("tempo", true)->value();
+        int novoTempo = tempoStr.toInt();
+        if (novoTempo > 0) {
+            tempoClick = novoTempo;
+            request->send(200, "text/plain", "Tempo do pulso atualizado para: " + String(tempoClick) + " ms");
+        } else {
+            request->send(400, "text/plain", "Valor inválido para o tempo do pulso");
+        }
+    } else {
+        request->send(400, "text/plain", "Parâmetro 'tempo' ausente");
+    } });
     server.begin();
 }
 
@@ -1171,6 +1217,18 @@ void loop()
             registrarEvento(("Relé " + String(pulseAtual.releIdx + 1)).c_str(), "Ativado e Desativado");
         }
     }
+    if (switchAtual.ativo)
+    {
+        // Verifica se o tempo do pulso expirou
+        if (millis() - switchAtual.inicio >= tempoClick)
+        {
+            digitalWrite(rele[switchAtual.releIdx].pino, LOW); // Desliga o relé
+            switchAtual.ativo = false;                         // Finaliza o pulso
+            Serial.println("Pulso finalizado para o relé " + String(switchAtual.releIdx + 1));
+        }
+    }
 
     delay(100); // Pequeno delay para evitar loops excessivos
 }
+
+// tempo do pulso, tempo do pulso da entrada, mostrar status do rele
