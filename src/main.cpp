@@ -912,6 +912,7 @@ void configurarWebServer()
                 rele[releIdx].horaAtivacao = request->getParam("horaAtivacao", true)->value();
                 rele[releIdx].horaDesativacao = request->getParam("horaDesativacao", true)->value();
                 request->send(200, "text/plain", "Horários configurados no Web Server");
+                request->redirect("/");
             } else {
                 request->send(400, "text/plain", "Relé inválido");
             }
@@ -962,13 +963,15 @@ void configurarWebServer()
         int novoTempo = tempoStr.toInt();
         if (novoTempo > 0) {
             tempoClick = novoTempo;
-            request->send(200, "text/plain", "Tempo do pulso atualizado para: " + String(tempoClick) + " ms");
+            Serial.println("Tempo do pulso atualizado para: " + String(tempoClick) + " ms");
+            request->redirect("/"); // Redireciona de volta para o índice
         } else {
             request->send(400, "text/plain", "Valor inválido para o tempo do pulso");
         }
     } else {
         request->send(400, "text/plain", "Parâmetro 'tempo' ausente");
     } });
+
     server.begin();
 }
 
