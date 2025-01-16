@@ -77,3 +77,4 @@ int rele5;
 
 bool streamReiniciado = false;
 int tempoEntrada = 200;
+int temposPulso[5] = {200, 200, 200, 200, 200};

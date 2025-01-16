@@ -772,7 +772,7 @@ void startWiFiManager()
  *
  * @return String com o conteúdo HTML da página.
  */
-String paginaPrincipal()
+String paginaPrincipal(int qtdRele)
 {
     String html = R"rawliteral(
 <!DOCTYPE html>
@@ -782,48 +782,162 @@ String paginaPrincipal()
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Controle de Relés</title>
     <style>
-        body { font-family: Arial, sans-serif; text-align: center; margin: 0; padding: 0; background-color: #f4f4f9; }
-        h1 { color: #333; }
-        .rele { margin: 10px 0; padding: 10px; border: 1px solid #ccc; border-radius: 5px; background-color: #fff; display: inline-block; }
-        button { padding: 10px 20px; margin: 5px; background-color: #007BFF; color: white; border: none; border-radius: 5px; cursor: pointer; }
-        button:hover { background-color: #0056b3; }
-        .estado { font-weight: bold; padding: 5px 10px; border-radius: 5px; }
-        .estado.ligado { background-color: green; color: white; }
-        .estado.desligado { background-color: red; color: white; }
+       <!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Controle de Relés</title>
+    <style>
+        body {
+            font-family: "Helvetica Neue", Arial, sans-serif;
+            background: linear-gradient(120deg, #f0f3f7, #d9e6f2);
+            color: #333;
+            margin: 0;
+            padding: 0;
+            text-align: center;
+        }
+
+        h1 {
+            color: #34495e;
+            margin-top: 20px;
+            font-size: 2.5em;
+            text-shadow: 1px 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        #reles-container {
+            display: flex;
+            flex-wrap: nowrap;       /* Mantém cards na mesma linha com scroll horizontal */
+            overflow-x: auto;        /* Scroll horizontal caso não caibam na tela */
+            gap: 15px;
+            padding: 20px;
+            justify-content: flex-start;
+            margin: 20px auto;
+            max-width: 90%;
+        }
+
+        .rele-card {
+            flex: 0 0 auto;
+            width: 270px;
+            padding: 20px;
+            border: none;
+            border-radius: 15px;
+            background: linear-gradient(145deg, #ffffff, #e6e8eb);
+            box-shadow: 10px 10px 20px rgba(0, 0, 0, 0.1),
+                        -5px -5px 15px rgba(255, 255, 255, 0.7);
+            text-align: center;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            
+            /* Para manter o status em cima e botões embaixo */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-between; /* Dá espaço entre o topo (estado + título) e os botões */
+        }
+
+        .rele-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 15px 15px 30px rgba(0, 0, 0, 0.15),
+                        -5px -5px 20px rgba(255, 255, 255, 0.8);
+        }
+
+        .rele-card h2 {
+            margin: 0 0 10px;
+            font-size: 1.3em;
+            color: #007BFF;
+            text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .estado {
+            margin-bottom: 10px;
+            display: inline-block;
+            padding: 10px 15px;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 1.1em;
+            min-width: 90px; /* Largura mínima para evitar “pular” de tamanho */
+            text-align: center;
+        }
+
+        .estado.ligado {
+            background: #27ae60;
+            color: #fff;
+            box-shadow: 0 4px 8px rgba(39, 174, 96, 0.5);
+        }
+
+        .estado.desligado {
+            background: #e74c3c;
+            color: #fff;
+            box-shadow: 0 4px 8px rgba(231, 76, 60, 0.5);
+        }
+
+        .botoes {
+            display: flex;
+            justify-content: space-around;
+            gap: 15px;
+            margin-top: 20px;
+            width: 100%;
+        }
+
+        button {
+            flex: 1;              /* Faz os botões dividirem o espaço igualmente */
+            padding: 12px 18px;
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-size: 14px;
+            cursor: pointer;
+            transition: transform 0.3s, background 0.3s;
+        }
+
+        button:hover {
+            transform: scale(1.05);
+        }
+
+        .btn-ligar {
+            background: #007BFF;
+            box-shadow: 0 4px 8px rgba(0, 123, 255, 0.4);
+        }
+        .btn-ligar:hover {
+            background: #0056b3;
+        }
+
+        .btn-desligar {
+            background: #dc3545;
+            box-shadow: 0 4px 8px rgba(220, 53, 69, 0.4);
+        }
+        .btn-desligar:hover {
+            background: #c82333;
+        }
+
+        .btn-switch {
+            background: #1abc9c;
+            box-shadow: 0 4px 8px rgba(26, 188, 156, 0.4);
+        }
+        .btn-switch:hover {
+            background: #16a085;
+        }
+
+        .btn-configurar {
+            background: #ffc107;
+            color: #333;
+            box-shadow: 0 4px 8px rgba(255, 193, 7, 0.4);
+        }
+        .btn-configurar:hover {
+            background: #e0a800;
+        }
     </style>
 </head>
 <body>
     <h1>Controle de Relés</h1>
+
     <div id="reles-container">
-        <!-- Controles para os relés -->
         %CONTROLES%
     </div>
-   
-    <h2>Configurar Horários</h2>
-    <form action="/configurar" method="POST">
-        <label for="rele">Relé:</label>
-        <input type="number" id="rele" name="rele" min="1" max="5" required><br>
-        <label for="horaAtivacao">Hora de Ativação (HH:MM:SS):</label>
-        <input type="text" id="horaAtivacao" name="horaAtivacao" oninput="formatTimeInput(this)" placeholder="HH:MM:SS" required><br><br>
-        <label for="horaDesativacao">Hora de Desativação (HH:MM:SS):</label>
-        <input type="text" id="horaDesativacao" name="horaDesativacao" oninput="formatTimeInput(this)" placeholder="HH:MM:SS" required><br><br>
-        <button type="submit">Configurar</button>
-    </form>
-    <h2>Configurar Tempo do Pulso</h2>
-<form action="/configurartempo" method="POST">
-    <label for="tempo">Tempo do Pulso (ms):</label>
-    <input type="number" id="tempo" name="tempo" min="1" required>
-    <button type="submit">Atualizar Tempo</button>
-</form>
-<h2>Configurar Tempo do Pulso da Entrada</h2>
-<form action="/configurarentrada" method="POST">
-    <label for="tempo">Tempo do Pulso da Entrada (ms):</label>
-    <input type="number" id="tempoEntrada" name="tempo" min="1" required>
-    <button type="submit">Atualizar Tempo</button>
-</form>
+
     <script>
-        // Atualiza o status e tempo dos relés a cada 1 segundo
-       setInterval(() => {
+        // Atualiza o status dos relés a cada 1 segundo
+        setInterval(() => {
             fetch('/status')
                 .then(response => response.json())
                 .then(data => {
@@ -841,41 +955,132 @@ String paginaPrincipal()
                     });
                 });
         }, 1000);
-
-        // Função para aplicar máscara no campo HH:MM:SS
-        function formatTimeInput(input) {
-            let value = input.value.replace(/[^0-9]/g, ""); // Remove caracteres não numéricos
-            if (value.length > 6) value = value.slice(0, 6); // Limita a 6 dígitos
-
-            if (value.length > 4) {
-                input.value = value.slice(0, 2) + ":" + value.slice(2, 4) + ":" + value.slice(4, 6);
-            } else if (value.length > 2) {
-                input.value = value.slice(0, 2) + ":" + value.slice(2, 4);
-            } else {
-                input.value = value;
-            }
-        }
     </script>
 </body>
 </html>
 )rawliteral";
 
-    // Manter os controles já existentes
-      String controles = "";
-    for (int i = 0; i < 5; i++) {
-        controles += "<div class='rele'>";
+    // Gera os cartões de relés
+    String controles;
+    for (int i = 0; i < qtdRele; i++)
+    {
+        controles += "<div class='rele-card'>";
         controles += "<h2>Relé " + String(i + 1) + "</h2>";
-        controles += "<p>Estado: <span id='estado-rele-" + String(i) + "' class='estado'></span></p>";
-        controles += "<p>Tempo do Pulso: <span id='rele-pulso-" + String(i) + "'>0 ms</span></p>";
-        controles += "<p>Tempo da Entrada: <span id='rele-entrada-" + String(i) + "'>0 ms</span></p>";
-        controles += "<button onclick='fetch(`/controle?rele=" + String(i + 1) + "&acao=ligar`)'>Ligar</button>";
-        controles += "<button onclick='fetch(`/controle?rele=" + String(i + 1) + "&acao=desligar`)'>Desligar</button>";
-        controles += "<button onclick='fetch(`/switch?rele=" + String(i + 1) + "`).then(response => response.text())'>Switch</button>";
+        controles += "<div class='estado desligado' id='estado-rele-" + String(i) + "'>Desligado</div>";
+        controles += "<button class='btn-ligar' onclick='fetch(`/controle?rele=" + String(i + 1) + "&acao=ligar`)'>Ligar</button>";
+        controles += "<button class='btn-desligar' onclick='fetch(`/controle?rele=" + String(i + 1) + "&acao=desligar`)'>Desligar</button>";
+        controles += "<button class='btn-switch' onclick='fetch(`/switch?rele=" + String(i + 1) + "`)'>Switch</button>";
+        // Botão que leva para a página de configuração daquele relé
+        controles += "<button class='btn-configurar' onclick='window.location.href=\"/configurartempo?rele=" + String(i + 1) + "\"'>Configurar</button>";
         controles += "</div>";
     }
+
     html.replace("%CONTROLES%", controles);
     return html;
+}
 
+String paginaConfiguracaoRele(int releNumber, int tempoPulso, int tempoEntrada, const String &horaAtivacao, const String &horaDesativacao)
+{
+    // Ajuste esses valores conforme o seu código de lógica
+    String html = R"rawliteral(
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8" />
+    <title>Configurar Relé )rawliteral" +
+                  String(releNumber) + R"rawliteral(</title>
+    <style>
+        body {
+            background: #f7f9fc;
+            font-family: "Helvetica Neue", Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            text-align: center;
+        }
+        .container {
+            max-width: 400px;
+            margin: 40px auto;
+            background: #fff;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            margin-bottom: 20px;
+            color: #2c3e50;
+        }
+        label {
+            display: block;
+            text-align: left;
+            margin-bottom: 6px;
+            font-weight: bold;
+            color: #333;
+        }
+        input[type="text"],
+        input[type="number"] {
+            width: 100%;
+            margin-bottom: 15px;
+            padding: 10px;
+            box-sizing: border-box;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        button {
+            background: #007BFF;
+            border: none;
+            color: #fff;
+            padding: 12px 20px;
+            font-size: 16px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .back-button {
+            margin-top: 15px;
+            display: inline-block;
+            background: #dc3545;
+        }
+        .back-button:hover {
+            background: #c82333;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Configurar Relé )rawliteral" +
+                  String(releNumber) + R"rawliteral(</h1>
+        <form action="/salvarconfig" method="POST">
+            <input type="hidden" name="rele" value=")rawliteral" +
+                  String(releNumber) + R"rawliteral(" />
+
+            <label>Tempo do Pulso (ms):</label>
+            <input type="number" name="tempoPulso" min="0" placeholder="Ex: 10000" value=")rawliteral" +
+                  String(tempoPulso) + R"rawliteral(" />
+            
+            <label>Tempo da Entrada (ms):</label>
+            <input type="number" name="tempoEntrada" min="0" placeholder="Ex: 500" value=")rawliteral" +
+                  String(tempoEntrada) + R"rawliteral(" />
+
+            <label>Hora de Ativação:</label>
+            <input type="text" name="horaAtivacao" placeholder="HH:MM:SS" value=")rawliteral" +
+                  horaAtivacao + R"rawliteral(" />
+            
+            <label>Hora de Desativação:</label>
+            <input type="text" name="horaDesativacao" placeholder="HH:MM:SS" value=")rawliteral" +
+                  horaDesativacao + R"rawliteral(" />
+
+            <button type="submit">Salvar Configuração</button>
+        </form>
+        <br />
+        <a href="/" class="back-button">Voltar</a>
+    </div>
+</body>
+</html>
+)rawliteral";
+
+    return html;
 }
 
 /**
@@ -894,9 +1099,10 @@ String paginaPrincipal()
 void configurarWebServer()
 {
     server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
-              { request->send(200, "text/html", paginaPrincipal()); });
+              { request->send(200, "text/html", paginaPrincipal(qtdRele)); });
 
-    server.on("/controle", HTTP_GET, [](AsyncWebServerRequest *request) {
+    server.on("/controle", HTTP_GET, [](AsyncWebServerRequest *request)
+              {
         if (request->hasParam("rele") && request->hasParam("acao")) {
             int releIdx = request->getParam("rele")->value().toInt() - 1;
             String acao = request->getParam("acao")->value();
@@ -914,8 +1120,7 @@ void configurarWebServer()
             }
         } else {
             request->send(400, "text/plain", "Parâmetros inválidos");
-        }
-    });
+        } });
 
     server.on("/configurar", HTTP_POST, [](AsyncWebServerRequest *request)
               {
@@ -936,25 +1141,26 @@ void configurarWebServer()
     server.on("/switch", HTTP_GET, [](AsyncWebServerRequest *request)
               {
     if (request->hasParam("rele")) {
-        int releIdx = request->getParam("rele")->value().toInt() - 1; // Índice do relé (0 a 4)
+        int releIdx = request->getParam("rele")->value().toInt() - 1;
         if (releIdx >= 0 && releIdx < qtdRele) {
             if (!switchAtual.ativo) {
                 digitalWrite(rele[releIdx].pino, HIGH); // Liga o relé
                 switchAtual.ativo = true;
                 switchAtual.inicio = millis(); // Marca o início do pulso
                 switchAtual.releIdx = releIdx;
-                request->send(200, "text/plain", "Pulso iniciado para o relé " + String(releIdx + 1));
+                request->send(200, "text/plain", "Switch ativado para o relé " + String(releIdx + 1));
             } else {
-                request->send(400, "text/plain", "Outro pulso está em andamento. Tente novamente.");
+                request->send(400, "text/plain", "Outro switch está ativo. Tente novamente.");
             }
         } else {
-            request->send(400, "text/plain", "Relé inválido");
+            request->send(400, "text/plain", "Relé inválido.");
         }
     } else {
-        request->send(400, "text/plain", "Parâmetro 'rele' ausente");
+        request->send(400, "text/plain", "Parâmetro 'rele' ausente.");
     } });
 
-    server.on("/status", HTTP_GET, [](AsyncWebServerRequest *request) {
+    server.on("/status", HTTP_GET, [](AsyncWebServerRequest *request)
+              {
         String response = "{ \"reles\": [";
         for (int i = 0; i < 5; i++) {
             response += "{";
@@ -964,24 +1170,29 @@ void configurarWebServer()
             if (i < 4) response += ",";
         }
         response += "] }";
-        request->send(200, "application/json", response);
-    });
+        request->send(200, "application/json", response); });
 
-    server.on("/configurartempo", HTTP_POST, [](AsyncWebServerRequest *request) {
-        if (request->hasParam("tempo", true)) {
-            String tempoStr = request->getParam("tempo", true)->value();
-            int novoTempo = tempoStr.toInt();
-            if (novoTempo > 0) {
-                tempoClick = novoTempo;
-                Serial.println("Tempo do pulso atualizado para: " + String(tempoClick) + " ms");
-                request->redirect("/");
-            } else {
-                request->send(400, "text/plain", "Valor inválido para o tempo do pulso");
-            }
+    server.on("/configurartemporele", HTTP_POST, [](AsyncWebServerRequest *request)
+              {
+    if (request->hasParam("rele", true) && request->hasParam("tempoPulso", true) && request->hasParam("tempoEntrada", true)) {
+        int releIdx = request->getParam("rele", true)->value().toInt() - 1;
+        int novoTempoPulso = request->getParam("tempoPulso", true)->value().toInt();
+        int novoTempoEntrada = request->getParam("tempoEntrada", true)->value().toInt();
+
+        if (releIdx >= 0 && releIdx < 5) {
+            temposPulso[releIdx] = novoTempoPulso;
+            tempoEntrada = novoTempoEntrada;
+            Serial.printf("Tempo do pulso do relé %d atualizado para: %d ms\n", releIdx + 1, novoTempoPulso);
+            Serial.printf("Tempo de entrada atualizado para: %d ms\n", novoTempoEntrada);
+            request->send(200, "text/plain", "Tempos atualizados");
+            request->redirect("/");
         } else {
-            request->send(400, "text/plain", "Parâmetro 'tempo' ausente");
+            request->send(400, "text/plain", "Relé inválido");
         }
-    });
+    } else {
+        request->send(400, "text/plain", "Parâmetros inválidos");
+    } });
+
     server.on("/configurarentrada", HTTP_POST, [](AsyncWebServerRequest *request)
               {
     if (request->hasParam("tempo", true)) {
@@ -996,6 +1207,74 @@ void configurarWebServer()
         }
     } else {
         request->send(400, "text/plain", "Parâmetro 'tempo' ausente");
+    } });
+
+    server.on("/configurartempo", HTTP_GET, [](AsyncWebServerRequest *request)
+              {
+    if (request->hasParam("rele"))
+    {
+        int releIdx = request->getParam("rele")->value().toInt() - 1;
+
+        // Use valores existentes ou padrão
+        int tempoPulso = temposPulso[releIdx];
+        int tempoEntrada = tempoEntrada; // Já definido
+        String horaAtivacao = rele[releIdx].horaAtivacao;
+        String horaDesativacao = rele[releIdx].horaDesativacao;
+
+        // Chamar a função com os argumentos
+        request->send(200, "text/html",
+                      paginaConfiguracaoRele(releIdx + 1, tempoPulso, tempoEntrada, horaAtivacao, horaDesativacao));
+    }
+    else
+    {
+        request->send(400, "text/plain", "Parâmetro 'rele' ausente.");
+    } });
+
+    server.on("/salvarconfig", HTTP_POST, [](AsyncWebServerRequest *request)
+              {
+    if (request->hasParam("rele", true))
+    {
+        int releIdx = request->getParam("rele", true)->value().toInt() - 1;
+
+        if (releIdx >= 0 && releIdx < qtdRele)
+        {
+            // Atualizando valores apenas se eles forem fornecidos
+            if (request->hasParam("tempoPulso", true))
+            {
+                int tempoPulso = request->getParam("tempoPulso", true)->value().toInt();
+                temposPulso[releIdx] = tempoPulso;
+            }
+
+            if (request->hasParam("tempoEntrada", true))
+            {
+                int tempoEntrada = request->getParam("tempoEntrada", true)->value().toInt();
+                tempoEntrada = tempoEntrada; // Atualize se necessário
+            }
+
+            if (request->hasParam("horaAtivacao", true))
+            {
+                String horaAtivacao = request->getParam("horaAtivacao", true)->value();
+                rele[releIdx].horaAtivacao = horaAtivacao;
+            }
+
+            if (request->hasParam("horaDesativacao", true))
+            {
+                String horaDesativacao = request->getParam("horaDesativacao", true)->value();
+                rele[releIdx].horaDesativacao = horaDesativacao;
+            }
+
+            // Responder ao cliente com sucesso
+            request->send(200, "text/plain", "Configuração salva com sucesso!");
+            request->redirect("/");
+        }
+        else
+        {
+            request->send(400, "text/plain", "Relé inválido.");
+        }
+    }
+    else
+    {
+        request->send(400, "text/plain", "Parâmetro 'rele' ausente.");
     } });
 
     server.begin();
@@ -1248,8 +1527,7 @@ void loop()
     }
     if (switchAtual.ativo)
     {
-        // Verifica se o tempo do pulso expirou
-        if (millis() - switchAtual.inicio >= tempoClick)
+        if (millis() - switchAtual.inicio >= temposPulso[switchAtual.releIdx])
         {
             digitalWrite(rele[switchAtual.releIdx].pino, LOW); // Desliga o relé
             switchAtual.ativo = false;                         // Finaliza o pulso
