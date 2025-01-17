@@ -2,17 +2,14 @@
 #include <ESPAsyncWebServer.h>
 #include <DNSServer.h>
 #include <WiFi.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
 
-const byte DNS_PORT = 53;
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 DNSServer dnsServer;
+const byte DNS_PORT = 53;
+
 AsyncWebServer server(80); // Porta padrão HTTP
-struct SwitchTask
-{
-    bool ativo = false;
-    unsigned long inicio = 0;
-    int releIdx = -1;
-};
-SwitchTask switchAtual;
 /**
  * Salva um valor numérico em um arquivo no sistema de arquivos SPIFFS.
  *
@@ -781,6 +778,8 @@ String paginaPrincipal(int qtdRele)
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Controle de Relés</title>
+    <link rel="preconnect" href="https://fonts.gstatic.com" />
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;500;700&display=swap" rel="stylesheet" />
     <style>
        <!DOCTYPE html>
 <html lang="pt-br">
@@ -789,147 +788,177 @@ String paginaPrincipal(int qtdRele)
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Controle de Relés</title>
     <style>
-        body {
-            font-family: "Helvetica Neue", Arial, sans-serif;
-            background: linear-gradient(120deg, #f0f3f7, #d9e6f2);
-            color: #333;
+           * {
             margin: 0;
             padding: 0;
+            box-sizing: border-box;
+        }
+
+        /* ==================== 
+           Corpo da página 
+           ==================== */
+        body {
+            font-family: "Poppins", Arial, sans-serif;
+            background: linear-gradient(120deg, #fdfbfb 0%, #ebedee 100%);
+            color: #333;
+            margin: 0;
             text-align: center;
         }
 
-        h1 {
-            color: #34495e;
-            margin-top: 20px;
-            font-size: 2.5em;
-            text-shadow: 1px 2px 4px rgba(0, 0, 0, 0.2);
+        /* ==================== 
+           Cabeçalho 
+           ==================== */
+        header {
+            background-color: #34495e;
+            padding: 20px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
         }
 
+        header h1 {
+            color: #fff;
+            font-weight: 700;
+            font-size: 2.2rem;
+        }
+
+        /* ==================== 
+           Container principal dos cards 
+           ==================== */
         #reles-container {
             display: flex;
-            flex-wrap: nowrap;       /* Mantém cards na mesma linha com scroll horizontal */
-            overflow-x: auto;        /* Scroll horizontal caso não caibam na tela */
+            flex-wrap: nowrap;        /* Mantém cards na mesma linha com scroll horizontal */
+            overflow-x: auto;         /* Scroll horizontal caso não caibam na tela */
             gap: 15px;
-            padding: 20px;
-            justify-content: flex-start;
-            margin: 20px auto;
-            max-width: 90%;
+            padding: 30px;
+            margin: 0 auto;
+            max-width: 95%;
         }
 
+        /* ==================== 
+           Card de cada relé 
+           ==================== */
         .rele-card {
-            flex: 0 0 auto;
+            flex: 0 0 auto;            /* Para não encolher nem esticar além do necessário */
             width: 270px;
+            min-height: 180px;
             padding: 20px;
-            border: none;
             border-radius: 15px;
-            background: linear-gradient(145deg, #ffffff, #e6e8eb);
-            box-shadow: 10px 10px 20px rgba(0, 0, 0, 0.1),
-                        -5px -5px 15px rgba(255, 255, 255, 0.7);
+            background: #fff;
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
             text-align: center;
             transition: transform 0.2s ease, box-shadow 0.2s ease;
             
-            /* Para manter o status em cima e botões embaixo */
             display: flex;
-            flex-direction: column;
+            flex-direction: column;    /* Coloca título e botões empilhados */
+            justify-content: space-between;
             align-items: center;
-            justify-content: space-between; /* Dá espaço entre o topo (estado + título) e os botões */
         }
 
         .rele-card:hover {
-            transform: translateY(-10px);
-            box-shadow: 15px 15px 30px rgba(0, 0, 0, 0.15),
-                        -5px -5px 20px rgba(255, 255, 255, 0.8);
+            transform: translateY(-5px);
+            box-shadow: 0 10px 15px rgba(0, 0, 0, 0.15);
         }
 
+        /* Título do card */
         .rele-card h2 {
-            margin: 0 0 10px;
-            font-size: 1.3em;
+            margin: 10px 0;
+            font-size: 1.2rem;
             color: #007BFF;
-            text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.1);
         }
 
+        /* Estado do relé (Ligado/Desligado) */
         .estado {
-            margin-bottom: 10px;
+            margin: 10px 0;
             display: inline-block;
-            padding: 10px 15px;
-            border-radius: 20px;
-            font-weight: bold;
-            font-size: 1.1em;
+            padding: 8px 16px;
+            border-radius: 30px;
+            font-weight: 500;
+            font-size: 1rem;
             min-width: 90px; /* Largura mínima para evitar “pular” de tamanho */
             text-align: center;
+            box-shadow: 0 3px 6px rgba(0, 0, 0, 0.1);
         }
 
         .estado.ligado {
             background: #27ae60;
             color: #fff;
-            box-shadow: 0 4px 8px rgba(39, 174, 96, 0.5);
         }
 
         .estado.desligado {
             background: #e74c3c;
             color: #fff;
-            box-shadow: 0 4px 8px rgba(231, 76, 60, 0.5);
         }
 
+        /* ==================== 
+           Área dos botões 
+           ==================== */
         .botoes {
             display: flex;
             justify-content: space-around;
-            gap: 15px;
-            margin-top: 20px;
+            align-items: center;
+            gap: 10px;
+            margin-top: 15px;
             width: 100%;
         }
 
         button {
-            flex: 1;              /* Faz os botões dividirem o espaço igualmente */
-            padding: 12px 18px;
+            flex: 1;
+            padding: 10px;
             border: none;
-            border-radius: 8px;
-            color: white;
-            font-size: 14px;
+            border-radius: 5px;
+            color: #fdfbfb;
+            font-size: 0.9rem;
+            font-weight: 500;
             cursor: pointer;
-            transition: transform 0.3s, background 0.3s;
+            transition: background 0.2s, transform 0.2s, box-shadow 0.2s;
+            outline: none;
         }
 
         button:hover {
-            transform: scale(1.05);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
         }
 
-        .btn-ligar {
-            background: #007BFF;
-            box-shadow: 0 4px 8px rgba(0, 123, 255, 0.4);
+        /* Botão que unifica “Ligar” e “Desligar” */
+        .btn-liga-desliga {
+            background: #2c3e50;
         }
-        .btn-ligar:hover {
-            background: #0056b3;
-        }
-
-        .btn-desligar {
-            background: #dc3545;
-            box-shadow: 0 4px 8px rgba(220, 53, 69, 0.4);
-        }
-        .btn-desligar:hover {
-            background: #c82333;
+        .btn-liga-desliga:hover {
+            background: #2c3e50;
         }
 
+        /* Botão Switch (mantido) */
         .btn-switch {
-            background: #1abc9c;
-            box-shadow: 0 4px 8px rgba(26, 188, 156, 0.4);
+            color: #fdfbfb;
+            background: #2c3e50;  /* ou qualquer cor que prefira */
         }
         .btn-switch:hover {
-            background: #16a085;
+            background: #2c3e50;
         }
 
+        /* Botão Configurar (mantido) */
         .btn-configurar {
-            background: #ffc107;
-            color: #333;
-            box-shadow: 0 4px 8px rgba(255, 193, 7, 0.4);
+            color: #fdfbfb;
+            background: #2c3e50;  /* ou qualquer cor que prefira */
         }
         .btn-configurar:hover {
-            background: #e0a800;
+            background: #d9890f;
+        }
+
+        /* ==================== 
+           Responsividade básica 
+           ==================== */
+        @media (max-width: 768px) {
+            .rele-card {
+                width: 80%;
+                margin: 0 auto;
+            }
         }
     </style>
 </head>
 <body>
-    <h1>Controle de Relés</h1>
+    <header>
+      <h1>Controle de Relés</h1>
+    </header>
 
     <div id="reles-container">
         %CONTROLES%
@@ -943,14 +972,31 @@ String paginaPrincipal(int qtdRele)
                 .then(data => {
                     data.reles.forEach((rele, index) => {
                         const estadoEl = document.getElementById(`estado-rele-${index}`);
+                        const ligaDesligaBtn = document.getElementById(`liga-desliga-btn-${index}`);
+
+                        if (!estadoEl || !ligaDesligaBtn) return; // Se não existir no DOM, ignora
+
+                        // Atualiza o label do estado (Ligado/Desligado)
                         if (rele.status) {
                             estadoEl.textContent = "Ligado";
                             estadoEl.classList.add("ligado");
                             estadoEl.classList.remove("desligado");
+
+                            // Se o relé está ligado, o botão deve oferecer a opção de desligar
+                            ligaDesligaBtn.textContent = "Desligar";
+                            ligaDesligaBtn.onclick = () => {
+                                fetch(`/controle?rele=${index + 1}&acao=desligar`);
+                            };
                         } else {
                             estadoEl.textContent = "Desligado";
                             estadoEl.classList.add("desligado");
                             estadoEl.classList.remove("ligado");
+
+                            // Se o relé está desligado, o botão deve oferecer a opção de ligar
+                            ligaDesligaBtn.textContent = "Ligar";
+                            ligaDesligaBtn.onclick = () => {
+                                fetch(`/controle?rele=${index + 1}&acao=ligar`);
+                            };
                         }
                     });
                 });
@@ -967,11 +1013,12 @@ String paginaPrincipal(int qtdRele)
         controles += "<div class='rele-card'>";
         controles += "<h2>Relé " + String(i + 1) + "</h2>";
         controles += "<div class='estado desligado' id='estado-rele-" + String(i) + "'>Desligado</div>";
-        controles += "<button class='btn-ligar' onclick='fetch(`/controle?rele=" + String(i + 1) + "&acao=ligar`)'>Ligar</button>";
-        controles += "<button class='btn-desligar' onclick='fetch(`/controle?rele=" + String(i + 1) + "&acao=desligar`)'>Desligar</button>";
-        controles += "<button class='btn-switch' onclick='fetch(`/switch?rele=" + String(i + 1) + "`)'>Switch</button>";
-        // Botão que leva para a página de configuração daquele relé
-        controles += "<button class='btn-configurar' onclick='window.location.href=\"/configurartempo?rele=" + String(i + 1) + "\"'>Configurar</button>";
+        controles += "<div class='botoes'>";
+        controles += "  <button class='btn-liga-desliga' id='liga-desliga-btn-" + String(i) + "'>Ligar</button>";
+        controles += "  <button class='btn-switch' onclick='fetch(`/switch?rele=" + String(i + 1) + "`)'>Switch</button>";
+        controles += "  <button class='btn-configurar' onclick='window.location.href=\"/configurartempo?rele=" + String(i + 1) + "\"'>Configurar</button>";
+        controles += "</div>";
+
         controles += "</div>";
     }
 
@@ -986,46 +1033,69 @@ String paginaConfiguracaoRele(int releNumber, int tempoPulso, int tempoEntrada, 
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-    <meta charset="UTF-8" />
+    <meta charset="UTF-8">
     <title>Configurar Relé )rawliteral" +
                   String(releNumber) + R"rawliteral(</title>
+    
+    <!-- Fonte Poppins, para um visual semelhante às demais páginas -->
+    <link rel="preconnect" href="https://fonts.gstatic.com">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;700&display=swap" rel="stylesheet">
+    
     <style>
-        body {
-            background: #f7f9fc;
-            font-family: "Helvetica Neue", Arial, sans-serif;
+        /* Reset básico */
+        * {
             margin: 0;
             padding: 0;
-            text-align: center;
+            box-sizing: border-box;
         }
+
+        body {
+            background: linear-gradient(120deg, #fdfbfb 0%, #ebedee 100%);
+            font-family: "Poppins", Arial, sans-serif;
+            text-align: center;
+            color: #333;
+        }
+
         .container {
             max-width: 400px;
             margin: 40px auto;
             background: #fff;
             border-radius: 8px;
             padding: 20px;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
         }
+
         h1 {
             margin-bottom: 20px;
             color: #2c3e50;
+            font-weight: 700;
         }
+
+        form {
+            text-align: left; /* Para alinhar os rótulos à esquerda */
+        }
+
         label {
             display: block;
-            text-align: left;
             margin-bottom: 6px;
-            font-weight: bold;
+            font-weight: 500;
             color: #333;
         }
+
         input[type="text"],
-        input[type="number"] {
+        input[type="number"],
+        input[type="time"] {
             width: 100%;
             margin-bottom: 15px;
             padding: 10px;
-            box-sizing: border-box;
             border: 1px solid #ccc;
             border-radius: 5px;
+            box-sizing: border-box;
+            font-size: 14px;
         }
-        button {
+
+        /* Botão “Salvar Configuração” */
+        button[type="submit"] {
             background: #007BFF;
             border: none;
             color: #fff;
@@ -1033,21 +1103,34 @@ String paginaConfiguracaoRele(int releNumber, int tempoPulso, int tempoEntrada, 
             font-size: 16px;
             border-radius: 5px;
             cursor: pointer;
+            transition: background 0.3s, transform 0.3s;
+            font-weight: 500;
         }
-        button:hover {
+        button[type="submit"]:hover {
             background: #0056b3;
+            transform: translateY(-2px);
         }
+
+        /* Botão “Voltar” */
         .back-button {
-            margin-top: 15px;
             display: inline-block;
+            margin-top: 15px;
             background: #dc3545;
+            color: #fff;
+            text-decoration: none;
+            padding: 10px 18px;
+            font-size: 14px;
+            border-radius: 5px;
+            transition: background 0.3s, transform 0.3s;
         }
         .back-button:hover {
             background: #c82333;
+            transform: translateY(-2px);
         }
     </style>
 </head>
 <body>
+
     <div class="container">
         <h1>Configurar Relé )rawliteral" +
                   String(releNumber) + R"rawliteral(</h1>
@@ -1064,18 +1147,21 @@ String paginaConfiguracaoRele(int releNumber, int tempoPulso, int tempoEntrada, 
                   String(tempoEntrada) + R"rawliteral(" />
 
             <label>Hora de Ativação:</label>
-            <input type="text" name="horaAtivacao" placeholder="HH:MM:SS" value=")rawliteral" +
+            <!-- Campo do tipo 'time' com passo de 1 segundo, caso queira permitir segundos -->
+            <input type="time" name="horaAtivacao" step="1" value=")rawliteral" +
                   horaAtivacao + R"rawliteral(" />
             
             <label>Hora de Desativação:</label>
-            <input type="text" name="horaDesativacao" placeholder="HH:MM:SS" value=")rawliteral" +
+            <input type="time" name="horaDesativacao" step="1" value=")rawliteral" +
                   horaDesativacao + R"rawliteral(" />
 
             <button type="submit">Salvar Configuração</button>
         </form>
+
         <br />
         <a href="/" class="back-button">Voltar</a>
     </div>
+
 </body>
 </html>
 )rawliteral";
@@ -1372,6 +1458,26 @@ void controlarRelesWebServer()
             Serial.printf("Relé %d desativado pelo Web Server.\n", i + 1);
         }
     }
+}
+
+void DisplayInit()
+{
+
+    if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C))
+    { // Address 0x3D for 128x64
+        Serial.println(F("SSD1306 allocation failed"));
+        for (;;)
+            ;
+    }
+    delay(2000);
+    display.clearDisplay();
+
+    display.setTextSize(1);
+    display.setTextColor(WHITE);
+    display.setCursor(0, 10);
+    // Display static text
+    // display.print("Date: " + date + " - Time: " + hour);
+    display.display();
 }
 
 /**
