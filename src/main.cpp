@@ -928,7 +928,7 @@ String paginaPrincipal(int qtdRele)
 
         /* Botão Switch (mantido) */
         .btn-switch {
-            color: #fdfbfb;
+            color: #fff; 
             background: #2c3e50;  /* ou qualquer cor que prefira */
         }
         .btn-switch:hover {
@@ -937,7 +937,7 @@ String paginaPrincipal(int qtdRele)
 
         /* Botão Configurar (mantido) */
         .btn-configurar {
-            color: #fdfbfb;
+            color: #fff; 
             background: #2c3e50;  /* ou qualquer cor que prefira */
         }
         .btn-configurar:hover {
