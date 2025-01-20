@@ -201,55 +201,57 @@ void entradaNaSaida()
     }
     if (algumON == 1)
     {
-        //         //*************************** */
-        //         display.clearDisplay();
-        //         display.fillScreen(WHITE);
-        //         display.display();
-        //         //*************************** */
+        //*************************** */
+        // display.clearDisplay();
+        // display.fillScreen(WHITE);
+        // display.display();
+        //*************************** */
         delay(tempoEntrada);
     }
-    // else{
-    //         //*************************** */
-    //         display.clearDisplay();
-    //         display.fillScreen(BLACK);
-    //         display.display();
-    //         //*************************** */
-    // }
-    for (int i = 0; i < qtdRele; i++)
+    else
     {
-        if (leitura[i] == 1)
+        //*************************** */
+        // display.clearDisplay();
+        // display.fillScreen(BLACK);
+        // display.display();
+        //*************************** */
+        // }
+        for (int i = 0; i < qtdRele; i++)
         {
-            digitalWrite(rele[i].pino, LOW);
+            if (leitura[i] == 1)
+            {
+                digitalWrite(rele[i].pino, LOW);
+            }
         }
-    }
-    for (int i = 0; i < qtdRele; i++)
-    {
-        if (leitura[i] == 1)
+        for (int i = 0; i < qtdRele; i++)
         {
-            if (i == 0)
+            if (leitura[i] == 1)
             {
-                rele1++;
-                salvarDados("/rele1.txt", rele1);
-            }
-            if (i == 1)
-            {
-                rele2++;
-                salvarDados("/rele2.txt", rele2);
-            }
-            if (i == 2)
-            {
-                rele3++;
-                salvarDados("/rele3.txt", rele3);
-            }
-            if (i == 3)
-            {
-                rele4++;
-                salvarDados("/rele4.txt", rele4);
-            }
-            if (i == 4)
-            {
-                rele5++;
-                salvarDados("/rele5.txt", rele5);
+                if (i == 0)
+                {
+                    rele1++;
+                    salvarDados("/rele1.txt", rele1);
+                }
+                if (i == 1)
+                {
+                    rele2++;
+                    salvarDados("/rele2.txt", rele2);
+                }
+                if (i == 2)
+                {
+                    rele3++;
+                    salvarDados("/rele3.txt", rele3);
+                }
+                if (i == 3)
+                {
+                    rele4++;
+                    salvarDados("/rele4.txt", rele4);
+                }
+                if (i == 4)
+                {
+                    rele5++;
+                    salvarDados("/rele5.txt", rele5);
+                }
             }
         }
     }
@@ -1533,6 +1535,15 @@ void setup()
         ethernetConnected = true;
     }
 
+    if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C))
+    { // Inicializar o display
+        Serial.println(F("Falha na inicialização do display SSD1306!"));
+        for (;;)
+            ; // Trava o sistema se não inicializar
+    }
+    display.clearDisplay();
+    display.display();
+
     // Se Ethernet falhar, verificar Wi-Fi
     if (!ethernetConnected)
     {
@@ -1546,6 +1557,15 @@ void setup()
             Serial.println("Wi-Fi conectado com as configurações salvas.");
         }
     }
+
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(WHITE);
+    display.setCursor(0, 0); // Posição inicial
+    display.println("Wi-Fi conectado!");
+    display.println("IP:");
+    display.println(WiFi.localIP().toString()); // Converte IP para string e exibe
+    display.display();
 
     // Configuração do Firebase
     config.api_key = API_KEY;

@@ -89,3 +89,8 @@ struct SwitchTask
     int releIdx = -1;
 };
 SwitchTask switchAtual;
+
+//22 scl
+//21 sda
+#define SDA_PIN 21 // Escolha o pino para SDA
+#define SCL_PIN 22 // Escolha o pino para SCL
