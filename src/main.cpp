@@ -186,71 +186,66 @@ void leRele()
  */
 void entradaNaSaida()
 {
-    bool algumON = 0;
-    leRele();
+    bool algumON = false; // Indica se algum relé foi ativado
+    leRele();             // Atualiza os estados dos botões
+
     for (int i = 0; i < qtdRele; i++)
     {
-        // Serial.println(i);
         if (leitura[i] == 1)
         {
-            Serial.printf("Botão do relé %d está pressionado (HIGH)\n", i);
-            digitalWrite(rele[i].pino, HIGH);
-            registrarEvento(("Relé " + String(i + 1)).c_str(), "Ativado");
-            algumON = 1;
+            digitalWrite(rele[i].pino, HIGH); // Ativa o relé correspondente
+            Serial.printf("Relé %d ativado por %d ms\n", i + 1, temposEntrada[i]);
+            delay(temposEntrada[i]);         // Aguarda o tempo configurado
+            digitalWrite(rele[i].pino, LOW); // Desativa o relé após o tempo
+            algumON = true;                  // Marca que houve um relé ativado
         }
     }
-    if (algumON == 1)
+
+    if (algumON)
     {
-        //*************************** */
+        // Atualização do display (se necessário)
         // display.clearDisplay();
         // display.fillScreen(WHITE);
         // display.display();
-        //*************************** */
-        delay(tempoEntrada);
     }
     else
     {
-        //*************************** */
-        // display.clearDisplay();
-        // display.fillScreen(BLACK);
-        // display.display();
-        //*************************** */
-        // }
+        // Se nenhum relé foi ativado, desliga todos os relés por segurança
         for (int i = 0; i < qtdRele; i++)
         {
-            if (leitura[i] == 1)
-            {
-                digitalWrite(rele[i].pino, LOW);
-            }
+            digitalWrite(rele[i].pino, LOW);
         }
+
+        // Atualiza os contadores dos relés
         for (int i = 0; i < qtdRele; i++)
         {
-            if (leitura[i] == 1)
+            if (leitura[i] == 1) // Verifica novamente se o botão foi pressionado
             {
-                if (i == 0)
+                switch (i)
                 {
+                case 0:
                     rele1++;
                     salvarDados("/rele1.txt", rele1);
-                }
-                if (i == 1)
-                {
+                    break;
+                case 1:
                     rele2++;
                     salvarDados("/rele2.txt", rele2);
-                }
-                if (i == 2)
-                {
+                    break;
+                case 2:
                     rele3++;
                     salvarDados("/rele3.txt", rele3);
-                }
-                if (i == 3)
-                {
+                    break;
+                case 3:
                     rele4++;
                     salvarDados("/rele4.txt", rele4);
-                }
-                if (i == 4)
-                {
+                    break;
+                case 4:
                     rele5++;
                     salvarDados("/rele5.txt", rele5);
+                    break;
+                default:
+                    Serial.printf("Relé %d fora do intervalo válido.\n", i + 1);
+                    break;
                 }
             }
         }
@@ -595,30 +590,39 @@ void atualizarEstadoRele2(int rele, int estado)
  * @param pino The pin number associated with the relay.
  * @param releNum The relay number for identification in logging.
  */
-void verificarHorarioReles(String ativacao, String desativacao, int pino, int releNum)
+void verificarHorarioReles(String ativacao, String desativacao, int pino, int releNum, bool &releAtivo)
 {
+    // Converte os horários para segundos
     if (ativacao.length() == 8 && desativacao.length() == 8)
     {
         int horaAtualSeg = timeClient.getHours() * 3600 + timeClient.getMinutes() * 60 + timeClient.getSeconds();
         int horaAtivacaoSeg = ativacao.substring(0, 2).toInt() * 3600 +
-                              ativacao.substring(3, 5).toInt() * 60 + ativacao.substring(6, 8).toInt();
+                              ativacao.substring(3, 5).toInt() * 60 +
+                              ativacao.substring(6, 8).toInt();
         int horaDesativacaoSeg = desativacao.substring(0, 2).toInt() * 3600 +
-                                 desativacao.substring(3, 5).toInt() * 60 + desativacao.substring(6, 8).toInt();
+                                 desativacao.substring(3, 5).toInt() * 60 +
+                                 desativacao.substring(6, 8).toInt();
 
-        int tolerancia = 2; // Tolerância de 2 segundos
-        if (abs(horaAtualSeg - horaAtivacaoSeg) <= tolerancia)
+        // Verifica se está no intervalo de ativação
+        if (horaAtualSeg >= horaAtivacaoSeg && horaAtualSeg < horaDesativacaoSeg)
         {
-            digitalWrite(pino, HIGH);
-            Serial.printf("Relé %d ativado!\n", releNum);
-            atualizarEstadoRele2(releNum, true);
-            registrarEvento(("Relé " + String(releNum)).c_str(), "Ativado");
+            // Ativa o relé apenas se ainda não estiver ativo
+            if (!releAtivo)
+            {
+                digitalWrite(pino, HIGH); // Liga o relé
+                releAtivo = true;         // Marca o relé como ativo
+                Serial.printf("Relé %d ativado no horário configurado.\n", releNum);
+            }
         }
-        if (abs(horaAtualSeg - horaDesativacaoSeg) <= tolerancia)
+        else
         {
-            digitalWrite(pino, LOW);
-            Serial.printf("Relé %d desativado!\n", releNum);
-            atualizarEstadoRele2(releNum, false);
-            registrarEvento(("Relé " + String(releNum)).c_str(), "Desativado");
+            // Desativa o relé fora do intervalo de ativação
+            if (releAtivo)
+            {
+                digitalWrite(pino, LOW); // Desliga o relé
+                releAtivo = false;       // Marca o relé como inativo
+                Serial.printf("Relé %d desativado no horário configurado.\n", releNum);
+            }
         }
     }
 }
@@ -1260,41 +1264,25 @@ void configurarWebServer()
         response += "] }";
         request->send(200, "application/json", response); });
 
-    server.on("/configurartemporele", HTTP_POST, [](AsyncWebServerRequest *request)
-              {
-    if (request->hasParam("rele", true) && request->hasParam("tempoPulso", true) && request->hasParam("tempoEntrada", true)) {
-        int releIdx = request->getParam("rele", true)->value().toInt() - 1;
-        int novoTempoPulso = request->getParam("tempoPulso", true)->value().toInt();
-        int novoTempoEntrada = request->getParam("tempoEntrada", true)->value().toInt();
-
-        if (releIdx >= 0 && releIdx < 5) {
-            temposPulso[releIdx] = novoTempoPulso;
-            tempoEntrada = novoTempoEntrada;
-            Serial.printf("Tempo do pulso do relé %d atualizado para: %d ms\n", releIdx + 1, novoTempoPulso);
-            Serial.printf("Tempo de entrada atualizado para: %d ms\n", novoTempoEntrada);
-            request->send(200, "text/plain", "Tempos atualizados");
-            request->redirect("/");
-        } else {
-            request->send(400, "text/plain", "Relé inválido");
-        }
-    } else {
-        request->send(400, "text/plain", "Parâmetros inválidos");
-    } });
-
     server.on("/configurarentrada", HTTP_POST, [](AsyncWebServerRequest *request)
               {
-    if (request->hasParam("tempo", true)) {
-        String tempoStr = request->getParam("tempo", true)->value();
-        int novoTempo = tempoStr.toInt();
-        if (novoTempo > 0) {
-            tempoEntrada = novoTempo;
-            Serial.println("Tempo do pulso da entrada atualizado para: " + String(tempoEntrada) + " ms");
-            request->redirect("/"); // Redireciona de volta para a página principal
+    if (request->hasParam("tempo", true) && request->hasParam("rele", true)) {
+        int releIdx = request->getParam("rele", true)->value().toInt() - 1;
+        int novoTempo = request->getParam("tempo", true)->value().toInt();
+
+        if (releIdx >= 0 && releIdx < qtdRele) {
+            if (novoTempo > 0) {
+                temposEntrada[releIdx] = novoTempo; // Salve no índice correto
+                Serial.printf("Tempo de entrada do relé %d atualizado para: %d ms\n", releIdx + 1, novoTempo);
+                request->redirect("/"); // Redireciona de volta para a página principal
+            } else {
+                request->send(400, "text/plain", "Valor inválido para o tempo do pulso da entrada");
+            }
         } else {
-            request->send(400, "text/plain", "Valor inválido para o tempo do pulso da entrada");
+            request->send(400, "text/plain", "Relé inválido.");
         }
     } else {
-        request->send(400, "text/plain", "Parâmetro 'tempo' ausente");
+        request->send(400, "text/plain", "Parâmetros ausentes.");
     } });
 
     server.on("/configurartempo", HTTP_GET, [](AsyncWebServerRequest *request)
@@ -1303,21 +1291,25 @@ void configurarWebServer()
     {
         int releIdx = request->getParam("rele")->value().toInt() - 1;
 
-        // Use valores existentes ou padrão
-        int tempoPulso = temposPulso[releIdx];
-        int tempoEntrada = tempoEntrada; // Já definido
-        String horaAtivacao = rele[releIdx].horaAtivacao;
-        String horaDesativacao = rele[releIdx].horaDesativacao;
+        if (releIdx >= 0 && releIdx < qtdRele)
+        {
+            String horaAtivacao = rele[releIdx].horaAtivacao;
+            String horaDesativacao = rele[releIdx].horaDesativacao;
 
-        // Chamar a função com os argumentos
-        request->send(200, "text/html",
-                      paginaConfiguracaoRele(releIdx + 1, tempoPulso, tempoEntrada, horaAtivacao, horaDesativacao));
+            String html = paginaConfiguracaoRele(releIdx + 1, temposPulso[releIdx], temposEntrada[releIdx], horaAtivacao, horaDesativacao);
+            request->send(200, "text/html", html);
+        }
+        else
+        {
+            request->send(400, "text/plain", "Relé inválido.");
+        }
     }
     else
     {
         request->send(400, "text/plain", "Parâmetro 'rele' ausente.");
     } });
 
+    // Salvando configuração de tempo
     server.on("/salvarconfig", HTTP_POST, [](AsyncWebServerRequest *request)
               {
     if (request->hasParam("rele", true))
@@ -1327,18 +1319,6 @@ void configurarWebServer()
         if (releIdx >= 0 && releIdx < qtdRele)
         {
             // Atualizando valores apenas se eles forem fornecidos
-            if (request->hasParam("tempoPulso", true))
-            {
-                int tempoPulso = request->getParam("tempoPulso", true)->value().toInt();
-                temposPulso[releIdx] = tempoPulso;
-            }
-
-            if (request->hasParam("tempoEntrada", true))
-            {
-                int tempoEntrada = request->getParam("tempoEntrada", true)->value().toInt();
-                tempoEntrada = tempoEntrada; // Atualize se necessário
-            }
-
             if (request->hasParam("horaAtivacao", true))
             {
                 String horaAtivacao = request->getParam("horaAtivacao", true)->value();
@@ -1353,6 +1333,9 @@ void configurarWebServer()
 
             // Responder ao cliente com sucesso
             request->send(200, "text/plain", "Configuração salva com sucesso!");
+            Serial.printf("Relé %d configurado:\n", releIdx + 1);
+            Serial.printf(" - Hora de ativação: %s\n", rele[releIdx].horaAtivacao.c_str());
+            Serial.printf(" - Hora de desativação: %s\n", rele[releIdx].horaDesativacao.c_str());
             request->redirect("/");
         }
         else
@@ -1364,6 +1347,25 @@ void configurarWebServer()
     {
         request->send(400, "text/plain", "Parâmetro 'rele' ausente.");
     } });
+
+    // Página de configuração do tempo
+    server.on("/configurartempo", HTTP_GET, [](AsyncWebServerRequest *request)
+              {
+        if (request->hasParam("rele")) {
+            int releIdx = request->getParam("rele")->value().toInt() - 1;
+
+            // Use valores existentes ou padrão
+            int tempoPulso = temposPulso[releIdx];
+            int tempoEntrada = temposEntrada[releIdx]; // Corrigido
+            String horaAtivacao = rele[releIdx].horaAtivacao;
+            String horaDesativacao = rele[releIdx].horaDesativacao;
+
+            // Chamar a função com os argumentos
+            request->send(200, "text/html",
+                          paginaConfiguracaoRele(releIdx + 1, tempoPulso, tempoEntrada, horaAtivacao, horaDesativacao));
+        } else {
+            request->send(400, "text/plain", "Parâmetro 'rele' ausente.");
+        } });
 
     server.begin();
 }
@@ -1636,11 +1638,11 @@ void loop()
         Serial.println("Hora Atual: " + horarioAtual);
     }
 
-    verificarHorarioReles(horaAtivacao, horaDesativacao, rele[0].pino, 1);
-    verificarHorarioReles(horaAtivacao2, horaDesativacao2, rele[1].pino, 2);
-    verificarHorarioReles(horaAtivacao3, horaDesativacao3, rele[2].pino, 3);
-    verificarHorarioReles(horaAtivacao4, horaDesativacao4, rele[3].pino, 4);
-    verificarHorarioReles(horaAtivacao5, horaDesativacao5, rele[4].pino, 5);
+    verificarHorarioReles(horaAtivacao, horaDesativacao, rele[0].pino, 1, relesAtivos[0]);
+    verificarHorarioReles(horaAtivacao2, horaDesativacao2, rele[1].pino, 2, relesAtivos[1]);
+    verificarHorarioReles(horaAtivacao3, horaDesativacao3, rele[2].pino, 3, relesAtivos[2]);
+    verificarHorarioReles(horaAtivacao4, horaDesativacao4, rele[3].pino, 4, relesAtivos[3]);
+    verificarHorarioReles(horaAtivacao5, horaDesativacao5, rele[4].pino, 5, relesAtivos[4]);
 
     if (pulseAtual.ativo)
     {

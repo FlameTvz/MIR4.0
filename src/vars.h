@@ -78,10 +78,11 @@ int rele4;
 int rele5;
 
 bool streamReiniciado = false;
-int tempoEntrada = 200;
+int temposEntrada[5] = {200, 200, 200, 200, 200};
 int temposPulso[5] = {200, 200, 200, 200, 200};
+bool relesAtivos[5] = {false, false, false, false, false};
 
-
+// int tempoEntrada = 200;
 struct SwitchTask
 {
     bool ativo = false;
@@ -90,7 +91,7 @@ struct SwitchTask
 };
 SwitchTask switchAtual;
 
-//22 scl
-//21 sda
+// 22 scl
+// 21 sda
 #define SDA_PIN 21 // Escolha o pino para SDA
 #define SCL_PIN 22 // Escolha o pino para SCL
