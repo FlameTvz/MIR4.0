@@ -186,17 +186,17 @@ void leRele()
  */
 void entradaNaSaida()
 {
-    bool algumON = 0;
-    leRele();
+    bool algumON = false; // Indica se algum relé foi ativado
+    leRele();             // Atualiza os estados dos botões
     for (int i = 0; i < qtdRele; i++)
     {
-        // Serial.println(i);
         if (leitura[i] == 1)
         {
-            Serial.printf("Botão do relé %d está pressionado (HIGH)\n", i);
-            digitalWrite(rele[i].pino, HIGH);
-            registrarEvento(("Relé " + String(i + 1)).c_str(), "Ativado");
-            algumON = 1;
+            digitalWrite(rele[i].pino, HIGH); // Ativa o relé correspondente
+            Serial.printf("Relé %d ativado por %d ms\n", i + 1, temposEntrada[i]);
+            delay(temposEntrada[i]);         // Aguarda o tempo configurado
+            digitalWrite(rele[i].pino, LOW); // Desativa o relé após o tempo
+            algumON = true;                  // Marca que houve um relé ativado
         }
     }
     if (algumON == 1)
@@ -206,7 +206,7 @@ void entradaNaSaida()
         // display.fillScreen(WHITE);
         // display.display();
         //*************************** */
-        delay(tempoEntrada);
+        // delay(tempoEntrada);
     }
     else
     {
@@ -256,6 +256,8 @@ void entradaNaSaida()
         }
     }
 }
+
+
 
 /**
  * @brief Alterna o estado de um pino de sa da do rel
@@ -621,7 +623,6 @@ void verificarHorarioReles(String ativacao, String desativacao, int pino, int re
             registrarEvento(("Relé " + String(releNum)).c_str(), "Desativado");
         }
     }
-    delay(200);
 }
 
 const char *htmlPage PROGMEM = R"rawliteral(
@@ -1228,25 +1229,32 @@ void configurarWebServer()
         } });
 
     server.on("/switch", HTTP_GET, [](AsyncWebServerRequest *request)
-               {
-    if (request->hasParam("rele")) {
+              {
+    if (request->hasParam("rele"))
+    {
         int releIdx = request->getParam("rele")->value().toInt() - 1;
-
-        if (releIdx >= 0 && releIdx < qtdRele) {
-            if (!switchAtual.ativo) {
-                digitalWrite(rele[releIdx].pino, HIGH); // Liga o relé
+        if (releIdx >= 0 && releIdx < qtdRele)
+        {
+            if (!switchAtual.ativo)
+            {
+                digitalWrite(rele[releIdx].pino, HIGH);
                 switchAtual.ativo = true;
-                switchAtual.inicio = millis();           // Marca quando começou
+                switchAtual.inicio = millis();
                 switchAtual.releIdx = releIdx;
-
-                request->send(200, "text/plain", "Switch ativado para o relé " + String(releIdx + 1));
-            } else {
-                request->send(400, "text/plain", "Outro switch está ativo. Tente novamente.");
+                request->send(200, "text/plain", "Switch ativado!");
             }
-        } else {
+            else
+            {
+                request->send(400, "text/plain", "Outro switch está ativo.");
+            }
+        }
+        else
+        {
             request->send(400, "text/plain", "Relé inválido.");
         }
-    } else {
+    }
+    else
+    {
         request->send(400, "text/plain", "Parâmetro 'rele' ausente.");
     } });
 
@@ -1329,34 +1337,27 @@ void configurarWebServer()
 
         if (releIdx >= 0 && releIdx < qtdRele)
         {
-            // Atualizando valores apenas se eles forem fornecidos
             if (request->hasParam("tempoPulso", true))
             {
-                int tempoPulso = request->getParam("tempoPulso", true)->value().toInt();
-                temposPulso[releIdx] = tempoPulso;
+                int tPulso = request->getParam("tempoPulso", true)->value().toInt();
+                temposPulso[releIdx] = tPulso;
             }
 
-             if (request->hasParam("tempoEntrada", true))
+            if (request->hasParam("tempoEntrada", true))
             {
-                int novoTempoEntrada = request->getParam("tempoEntrada", true)->value().toInt();
-                temposEntrada[releIdx] = novoTempoEntrada;
-                Serial.println(novoTempoEntrada); 
+                int tEntrada = request->getParam("tempoEntrada", true)->value().toInt();
+                temposEntrada[releIdx] = tEntrada;
             }
 
+            // Horas de ativação (opcional):
             if (request->hasParam("horaAtivacao", true))
-            {
-                String horaAtivacao = request->getParam("horaAtivacao", true)->value();
-                rele[releIdx].horaAtivacao = horaAtivacao;
-            }
+                rele[releIdx].horaAtivacao = request->getParam("horaAtivacao", true)->value();
 
+            // Horas de desativação (opcional):
             if (request->hasParam("horaDesativacao", true))
-            {
-                String horaDesativacao = request->getParam("horaDesativacao", true)->value();
-                rele[releIdx].horaDesativacao = horaDesativacao;
-            }
+                rele[releIdx].horaDesativacao = request->getParam("horaDesativacao", true)->value();
 
-            // Responder ao cliente com sucesso
-            request->send(200, "text/plain", "Configuração salva com sucesso!");
+            // ...
             request->redirect("/");
         }
         else
@@ -1614,9 +1615,10 @@ void setup()
 
 void loop()
 {
+    leRele();
+    entradaNaSaida();
     controlarRelesWebServer();
     tiposBots();
-    entradaNaSaida();
     static unsigned long lastHeartBeat = 0;
     const unsigned long heartBeatInterval = 60000; // 1 minuto
 
@@ -1641,7 +1643,6 @@ void loop()
     }
 
     verificarHorarioReles(horaAtivacao, horaDesativacao, rele[0].pino, 1);
-
     verificarHorarioReles(horaAtivacao2, horaDesativacao2, rele[1].pino, 2);
     verificarHorarioReles(horaAtivacao3, horaDesativacao3, rele[2].pino, 3);
     verificarHorarioReles(horaAtivacao4, horaDesativacao4, rele[3].pino, 4);
@@ -1658,16 +1659,11 @@ void loop()
     }
     if (switchAtual.ativo)
     {
-        // tempoEntrada para aquele relé específico:
-        unsigned long tempoNecessario = temposEntrada[switchAtual.releIdx];
         unsigned long tempoDecorrido = millis() - switchAtual.inicio;
-
-        if (tempoDecorrido >= tempoNecessario)
+        int releIdx = switchAtual.releIdx;
+        if (tempoDecorrido >= temposPulso[releIdx])
         {
-            // Tempo expirou: desliga o relé
-            digitalWrite(rele[switchAtual.releIdx].pino, LOW);
-
-            // Marca que não está mais ativo
+            digitalWrite(rele[releIdx].pino, LOW);
             switchAtual.ativo = false;
         }
     }
