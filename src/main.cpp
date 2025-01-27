@@ -257,8 +257,6 @@ void entradaNaSaida()
     }
 }
 
-
-
 /**
  * @brief Alterna o estado de um pino de sa da do rel
  *
@@ -1044,94 +1042,100 @@ String paginaConfiguracaoRele(int releNumber, int tempoPulso, int tempoEntrada, 
     <!-- Fonte Poppins, para um visual semelhante às demais páginas -->
     <link rel="preconnect" href="https://fonts.gstatic.com">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;700&display=swap" rel="stylesheet">
-    
     <style>
-        /* Reset básico */
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+  /* Reset básico */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
 
-        body {
-            background: linear-gradient(120deg, #fdfbfb 0%, #ebedee 100%);
-            font-family: "Poppins", Arial, sans-serif;
-            text-align: center;
-            color: #333;
-        }
+body {
+    background: linear-gradient(120deg, #fdfbfb 0%, #ebedee 100%);
+    font-family: "Poppins", Arial, sans-serif;
+    text-align: center;
+    color: #333;
+}
 
-        .container {
-            max-width: 400px;
-            margin: 40px auto;
-            background: #fff;
-            border-radius: 8px;
-            padding: 20px;
-            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
-        }
+.container {
+    max-width: 400px;
+    margin: 40px auto;
+    background: #fff;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
+}
 
-        h1 {
-            margin-bottom: 20px;
-            color: #2c3e50;
-            font-weight: 700;
-        }
+h1 {
+    margin-bottom: 20px;
+    color: #2c3e50;
+    font-weight: 700;
+}
 
-        form {
-            text-align: left; /* Para alinhar os rótulos à esquerda */
-        }
+form {
+    text-align: left; /* Para alinhar os rótulos à esquerda */
+}
 
-        label {
-            display: block;
-            margin-bottom: 6px;
-            font-weight: 500;
-            color: #333;
-        }
+label {
+    display: block;
+    margin-bottom: 6px;
+    font-weight: 500;
+    color: #333;
+}
 
-        input[type="text"],
-        input[type="number"],
-        input[type="time"] {
-            width: 100%;
-            margin-bottom: 15px;
-            padding: 10px;
-            border: 1px solid #ccc;
-            border-radius: 5px;
-            box-sizing: border-box;
-            font-size: 14px;
-        }
+input[type="text"],
+input[type="number"],
+input[type="time"] {
+    width: 100%;
+    margin-bottom: 15px;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    box-sizing: border-box;
+    font-size: 14px;
+}
 
-        /* Botão “Salvar Configuração” */
-        button[type="submit"] {
-            background: #007BFF;
-            border: none;
-            color: #fff;
-            padding: 12px 20px;
-            font-size: 16px;
-            border-radius: 5px;
-            cursor: pointer;
-            transition: background 0.3s, transform 0.3s;
-            font-weight: 500;
-        }
-        button[type="submit"]:hover {
-            background: #0056b3;
-            transform: translateY(-2px);
-        }
+button[type="submit"] {
+    background: #007BFF;
+    border: none;
+    color: #fff;
+    padding: 12px 20px;
+    font-size: 16px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background 0.3s, transform 0.3s;
+    font-weight: 500;
+    /* Altera apenas o necessário a partir do seu código */
+    display: block;           /* coloca em linha separada */
+    margin: 0 auto;           /* centraliza horizontalmente */
+    width: fit-content;       /* ajusta a largura ao conteúdo */
+}
+button[type="submit"]:hover {
+    background: #0056b3;
+    transform: translateY(-2px);
+}
 
-        /* Botão “Voltar” */
-        .back-button {
-            display: inline-block;
-            margin-top: 15px;
-            background: #dc3545;
-            color: #fff;
-            text-decoration: none;
-            padding: 10px 18px;
-            font-size: 14px;
-            border-radius: 5px;
-            transition: background 0.3s, transform 0.3s;
-        }
-        .back-button:hover {
-            background: #c82333;
-            transform: translateY(-2px);
-        }
-    </style>
+/* Botão “Voltar” */
+.back-button {
+    background: #dc3545;
+    color: #fff;
+    text-decoration: none;
+    padding: 12px 20px;
+    font-size: 16px;
+    border-radius: 5px;
+    transition: background 0.3s, transform 0.3s;
+    font-weight: 500;
+    /* Altera apenas o necessário a partir do seu código */
+    display: block;           /* linha separada */
+    margin: 0 auto 10px;      /* centraliza e adiciona espaço abaixo */
+    width: fit-content;       /* ajusta a largura ao conteúdo */
+}
+.back-button:hover {
+    background: #c82333;
+    transform: translateY(-2px);
+}
+</style>
+
 </head>
 <body>
 
