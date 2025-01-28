@@ -949,12 +949,45 @@ String paginaPrincipal(int qtdRele)
         /* ==================== 
            Responsividade básica 
            ==================== */
-        @media (max-width: 768px) {
-            .rele-card {
-                width: 80%;
-                margin: 0 auto;
-            }
-        }
+        @media (max-width: 1200px) {
+    /* Ajustes para telas abaixo de 1200px */
+    #reles-container {
+        max-width: 100%;
+        padding: 20px;
+    }
+    .rele-card {
+        width: calc(25% - 15px); /* Exemplo: 4 cards por linha se houver espaço */
+    }
+}
+
+@media (max-width: 992px) {
+    /* Ajustes para telas abaixo de 992px */
+    .rele-card {
+        width: calc(33.33% - 15px); /* Exemplo: 3 cards por linha */
+    }
+}
+
+@media (max-width: 768px) {
+    /* Ajustes para telas abaixo de 768px */
+    #reles-container {
+        flex-wrap: wrap;         /* Permite quebrar a linha em vez de scroll horizontal */
+        justify-content: center; /* Centraliza as linhas de cards */
+        overflow-x: visible;     /* Desativa scroll horizontal se desejar */
+    }
+    .rele-card {
+        width: calc(50% - 15px); /* 2 cards por linha */
+        margin: 10px auto;
+    }
+}
+
+@media (max-width: 576px) {
+    /* Ajustes para telas abaixo de 576px */
+    .rele-card {
+        width: calc(100% - 20px); /* Card ocupando quase toda a largura */
+        max-width: 350px;         /* Limite opcional de largura */
+        margin: 10px auto;
+    }
+}
     </style>
 </head>
 <body>
@@ -968,41 +1001,46 @@ String paginaPrincipal(int qtdRele)
 
     <script>
         // Atualiza o status dos relés a cada 1 segundo
-        setInterval(() => {
-            fetch('/status')
-                .then(response => response.json())
-                .then(data => {
-                    data.reles.forEach((rele, index) => {
-                        const estadoEl = document.getElementById(`estado-rele-${index}`);
-                        const ligaDesligaBtn = document.getElementById(`liga-desliga-btn-${index}`);
+      setInterval(() => {
+    fetch('/status')
+        .then(response => response.json())
+        .then(data => {
+            data.reles.forEach((rele, index) => {
+                const estadoEl = document.getElementById(`estado-rele-${index}`);
+                const ligaDesligaBtn = document.getElementById(`liga-desliga-btn-${index}`);
 
-                        if (!estadoEl || !ligaDesligaBtn) return; // Se não existir no DOM, ignora
+                if (!estadoEl || !ligaDesligaBtn) return;
 
-                        // Atualiza o label do estado (Ligado/Desligado)
-                        if (rele.status) {
-                            estadoEl.textContent = "Ligado";
-                            estadoEl.classList.add("ligado");
-                            estadoEl.classList.remove("desligado");
+                // Atualiza apenas o estado visual
+                if (rele.status) {
+                    estadoEl.textContent = "Ligado";
+                    estadoEl.classList.add("ligado");
+                    estadoEl.classList.remove("desligado");
+                    ligaDesligaBtn.textContent = "Desligar";
+                } else {
+                    estadoEl.textContent = "Desligado";
+                    estadoEl.classList.add("desligado");
+                    estadoEl.classList.remove("ligado");
+                    ligaDesligaBtn.textContent = "Ligar";
+                }
 
-                            // Se o relé está ligado, o botão deve oferecer a opção de desligar
-                            ligaDesligaBtn.textContent = "Desligar";
-                            ligaDesligaBtn.onclick = () => {
-                                fetch(`/controle?rele=${index + 1}&acao=desligar`);
-                            };
-                        } else {
-                            estadoEl.textContent = "Desligado";
-                            estadoEl.classList.add("desligado");
-                            estadoEl.classList.remove("ligado");
-
-                            // Se o relé está desligado, o botão deve oferecer a opção de ligar
-                            ligaDesligaBtn.textContent = "Ligar";
-                            ligaDesligaBtn.onclick = () => {
-                                fetch(`/controle?rele=${index + 1}&acao=ligar`);
-                            };
-                        }
+                // Define os event listeners apenas uma vez
+                if (!ligaDesligaBtn.hasEventListener) {
+                    ligaDesligaBtn.hasEventListener = true;
+                    ligaDesligaBtn.addEventListener('click', () => {
+                        const acao = rele.status ? 'desligar' : 'ligar';
+                        fetch(`/controle?rele=${index + 1}&acao=${acao}`)
+                            .then(() => {
+                                // Atualiza o estado imediatamente após a ação
+                                rele.status = !rele.status;
+                            })
+                            .catch(err => console.error("Erro ao controlar relé:", err));
                     });
-                });
-        }, 1000);
+                }
+            });
+        })
+        .catch(err => console.error("Erro ao buscar status:", err));
+}, 250);
     </script>
 </body>
 </html>
@@ -1134,6 +1172,77 @@ button[type="submit"]:hover {
     background: #c82333;
     transform: translateY(-2px);
 }
+
+@media (max-width: 1200px) and (min-width: 993px) {
+    .container {
+        max-width: 600px;    /* Aumenta um pouco a largura máxima em telas intermediárias */
+        padding: 30px;
+    }
+    h1 {
+        font-size: 1.8rem;   /* Ajusta levemente o tamanho da fonte do título */
+    }
+}
+
+/*
+   Entre 768px e 992px */
+@media (max-width: 992px) and (min-width: 769px) {
+    .container {
+        max-width: 500px;
+        padding: 25px;
+    }
+    h1 {
+        font-size: 1.6rem;
+    }
+    input[type="text"],
+    input[type="number"],
+    input[type="time"] {
+        font-size: 15px;     /* Um pouquinho maior se desejar */
+    }
+}
+
+/* 
+   Entre 576px e 768px */
+@media (max-width: 768px) and (min-width: 577px) {
+    .container {
+        max-width: 90%;      /* Ocupar 90% da tela, mantendo espaçamento */
+        margin: 20px auto;
+    }
+    h1 {
+        font-size: 1.4rem;
+    }
+    input[type="text"],
+    input[type="number"],
+    input[type="time"] {
+        font-size: 14px;
+    }
+    button[type="submit"], .back-button {
+        padding: 10px 16px;  /* Ajusta um pouco o tamanho dos botões */
+        font-size: 15px;
+    }
+}
+
+/*
+   Abaixo de 576px 
+   (smartphones, telas muito pequenas) */
+@media (max-width: 576px) {
+    .container {
+        max-width: 95%;
+        margin: 15px auto;
+        padding: 15px;
+    }
+    h1 {
+        font-size: 1.2rem;
+    }
+    input[type="text"],
+    input[type="number"],
+    input[type="time"] {
+        font-size: 14px;
+    }
+    button[type="submit"], .back-button {
+        padding: 10px 14px;
+        font-size: 14px;
+    }
+}
 </style>
 
 </head>
@@ -1197,24 +1306,24 @@ void configurarWebServer()
 
     server.on("/controle", HTTP_GET, [](AsyncWebServerRequest *request)
               {
-        if (request->hasParam("rele") && request->hasParam("acao")) {
-            int releIdx = request->getParam("rele")->value().toInt() - 1;
-            String acao = request->getParam("acao")->value();
-            if (releIdx >= 0 && releIdx < 5) {
-                if (acao == "ligar") {
-                    digitalWrite(rele[releIdx].pino, HIGH);
-                    rele[releIdx].status = 1;
-                } else if (acao == "desligar") {
-                    digitalWrite(rele[releIdx].pino, LOW);
-                    rele[releIdx].status = 0;
-                }
-                request->send(200, "text/plain", "OK");
-            } else {
-                request->send(400, "text/plain", "Relé inválido");
+    if (request->hasParam("rele") && request->hasParam("acao")) {
+        int releIdx = request->getParam("rele")->value().toInt() - 1;
+        String acao = request->getParam("acao")->value();
+        if (releIdx >= 0 && releIdx < qtdRele) {
+            if (acao == "ligar") {
+                digitalWrite(rele[releIdx].pino, HIGH);
+                rele[releIdx].status = 1; // Atualiza status no backend
+            } else if (acao == "desligar") {
+                digitalWrite(rele[releIdx].pino, LOW);
+                rele[releIdx].status = 0; // Atualiza status no backend
             }
+            request->send(200, "text/plain", "OK");
         } else {
-            request->send(400, "text/plain", "Parâmetros inválidos");
-        } });
+            request->send(400, "text/plain", "Relé inválido");
+        }
+    } else {
+        request->send(400, "text/plain", "Parâmetros inválidos");
+    } });
 
     server.on("/configurar", HTTP_POST, [](AsyncWebServerRequest *request)
               {
@@ -1242,6 +1351,7 @@ void configurarWebServer()
             if (!switchAtual.ativo)
             {
                 digitalWrite(rele[releIdx].pino, HIGH);
+                rele[releIdx].status = 1; // Adicionar esta linha
                 switchAtual.ativo = true;
                 switchAtual.inicio = millis();
                 switchAtual.releIdx = releIdx;
@@ -1264,16 +1374,15 @@ void configurarWebServer()
 
     server.on("/status", HTTP_GET, [](AsyncWebServerRequest *request)
               {
-        String response = "{ \"reles\": [";
-        for (int i = 0; i < 5; i++) {
-            response += "{";
-            response += "\"status\": " + String(rele[i].status) + ",";
-            response += "\"tempoPulso\": " + String(tempoClick);
-            response += "}";
-            if (i < 4) response += ",";
-        }
-        response += "] }";
-        request->send(200, "application/json", response); });
+    String response = "{ \"reles\": [";
+    for (int i = 0; i < qtdRele; i++) {
+        response += "{";
+        response += "\"status\": " + String(rele[i].status); // Retorna status (0 ou 1)
+        response += "}";
+        if (i < qtdRele - 1) response += ",";
+    }
+    response += "] }";
+    request->send(200, "application/json", response); });
 
     server.on("/configurartemporele", HTTP_POST, [](AsyncWebServerRequest *request)
               {
@@ -1652,23 +1761,29 @@ void loop()
     verificarHorarioReles(horaAtivacao4, horaDesativacao4, rele[3].pino, 4);
     verificarHorarioReles(horaAtivacao5, horaDesativacao5, rele[4].pino, 5);
 
-    if (pulseAtual.ativo)
-    {
-        if (millis() - pulseAtual.inicio >= 200)
-        {                                                     // Após 200ms
-            digitalWrite(rele[pulseAtual.releIdx].pino, LOW); // Desliga o relé
-            pulseAtual.ativo = false;                         // Finaliza o estado do pulso
-            registrarEvento(("Relé " + String(pulseAtual.releIdx + 1)).c_str(), "Ativado e Desativado");
-        }
-    }
+    //     if (pulseAtual.ativo) {
+    //     if (millis() - pulseAtual.inicio >= 6000) { // Após 6 segundos
+    //         digitalWrite(rele[pulseAtual.releIdx].pino, LOW); // Desativa o relé
+    //         pulseAtual.ativo = false;
+    //         rele[pulseAtual.releIdx].status = 0; // Atualiza o status
+    //         // Serial.printf("Relé %d desativado após pulso.\n", pulseAtual.releIdx + 1);
+    //     } else {
+    //         rele[pulseAtual.releIdx].status = 1; // Atualiza o status enquanto está ativado
+    //     }
+    // }
     if (switchAtual.ativo)
     {
         unsigned long tempoDecorrido = millis() - switchAtual.inicio;
         int releIdx = switchAtual.releIdx;
+
+        // Atualiza o status enquanto o relé está ativo
+        rele[releIdx].status = 1;
+
         if (tempoDecorrido >= temposPulso[releIdx])
         {
             digitalWrite(rele[releIdx].pino, LOW);
             switchAtual.ativo = false;
+            rele[releIdx].status = 0; // Atualiza o status quando desativa
         }
     }
 
