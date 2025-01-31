@@ -81,6 +81,8 @@ bool streamReiniciado = false;
 int temposEntrada[5] = {200, 200, 200, 200, 200};
 int temposPulso[5] = {200, 200, 200, 200, 200};
 bool relesAtivos[5] = {false, false, false, false, false};
+int modoAcionamento[5] = {2, 2, 2, 2, 2};
+
 int tempoEntrada = 200;
 // int tempoEntrada = 200;
 struct SwitchTask
