@@ -58,10 +58,11 @@ public:
     const char *caminhoArquivo; // Caminho do arquivo no SPIFFS
     String horaAtivacao;        // Hora de ativação
     String horaDesativacao;     // Hora de desativação
+    String nome;
 
     Reles(int pino, int btn)
         : pino(pino), btn(btn), status(0), contador(0), caminhoArquivo(nullptr),
-          horaAtivacao(""), horaDesativacao("") {}
+          horaAtivacao(""), horaDesativacao(""), nome("") {}
 };
 
 Reles rele[5] = {

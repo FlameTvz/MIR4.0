@@ -4,6 +4,7 @@
 #include <WiFi.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
+#include <ArduinoJson.h>
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
@@ -365,6 +366,66 @@ void enviarheartbeat()
     else
     {
         Serial.println("Erro ao enviar HeartBeat: " + firebaseData.errorReason());
+    }
+}
+
+void salvarConfiguracoes() {
+    // Cria um documento JSON e preenche com os valores atuais
+    StaticJsonDocument<512> doc; 
+
+    JsonArray arr = doc.createNestedArray("reles");
+    for (int i = 0; i < qtdRele; i++) {
+        JsonObject obj = arr.createNestedObject();
+        obj["tempoPulso"] = temposPulso[i];
+        obj["tempoEntrada"] = temposEntrada[i];
+        obj["horaAtivacao"] = rele[i].horaAtivacao;
+        obj["horaDesativacao"] = rele[i].horaDesativacao;
+        // se quiser salvar "nome" também: obj["nome"] = rele[i].nome;
+    }
+
+    // Abre/cria o arquivo e escreve
+    File file = SPIFFS.open("/configRele.json", FILE_WRITE);
+    if (file) {
+        serializeJson(doc, file);
+        file.close();
+        Serial.println("Configurações salvas em /configRele.json");
+    } else {
+        Serial.println("Falha ao abrir /configRele.json para escrita");
+    }
+}
+
+void carregarConfiguracoes() {
+    if(!SPIFFS.exists("/configRele.json")) {
+        Serial.println("Nenhum arquivo /configRele.json encontrado, usando valores padrão.");
+        return;
+    }
+    File file = SPIFFS.open("/configRele.json", FILE_READ);
+    if (!file) {
+        Serial.println("Falha ao abrir /configRele.json para leitura");
+        return;
+    }
+
+    StaticJsonDocument<512> doc;
+    DeserializationError error = deserializeJson(doc, file);
+    if (error) {
+        Serial.println("Erro ao fazer parse do JSON de config: ");
+        Serial.println(error.f_str());
+        file.close();
+        return;
+    }
+
+    file.close();
+    JsonArray arr = doc["reles"];
+    if (!arr.isNull()) {
+        for (int i = 0; i < arr.size() && i < qtdRele; i++) {
+            JsonObject obj = arr[i];
+            temposPulso[i] = obj["tempoPulso"] | 200;
+            temposEntrada[i] = obj["tempoEntrada"] | 200;
+            rele[i].horaAtivacao = obj["horaAtivacao"] | "";
+            rele[i].horaDesativacao = obj["horaDesativacao"] | "";
+            // se tiver nome: rele[i].nome = obj["nome"] | ("Relé " + String(i+1));
+        }
+        Serial.println("Configurações carregadas de /configRele.json");
     }
 }
 
@@ -1088,19 +1149,21 @@ String paginaPrincipal(int qtdRele,
         String hDesativ = rele[i].horaDesativacao;
 
         controles += "<div class='rele-card'>";
-        controles += "  <h2>Relé " + String(i + 1) + "</h2>";
+        controles += "<h2 contenteditable='true' ";
+        controles += " onblur='salvarNomeRele(" + String(i + 1) + ", this.innerText)'>";
+        controles += rele[i].nome;
+        controles += "</h2>";
         controles += "  <div class='estado desligado' id='estado-rele-" + String(i) + "'>Desligado</div>";
         controles += "  <div class='botoes'>";
         controles += "    <button class='btn-liga-desliga' id='liga-desliga-btn-" + String(i) + "'>Ligar</button>";
-        controles += "    <button class='btn-switch' onclick='fetch(`/switch?rele=" + String(i + 1) + "`)'>Switch</button>";
+        controles += "    <button class='btn-switch' onclick='fetch(`/switch?rele=" + String(i + 1) + "`)'>Pulso</button>";
         controles += "  </div>";
         controles += "  <div class='container'>";
-        controles += "    <h1>Configurar Relé " + String(i + 1) + "</h1>";
         controles += "    <form action='/salvarconfig' method='POST'>";
         controles += "      <input type='hidden' name='rele' value='" + String(i + 1) + "' />";
         controles += "      <label>Tempo do Pulso (ms):</label>";
         controles += "      <input type='number' name='tempoPulso' min='0' placeholder='Ex: 10000' value='" + String(tPulso) + "' />";
-        controles += "      <label>Tempo da Entrada (ms):</label>";
+        controles += "      <label>Tempo de Debounce (ms):</label>";
         controles += "      <input type='number' name='tempoEntrada' min='0' placeholder='Ex: 500' value='" + String(tEntrada) + "' />";
         controles += "      <label>Modo de Acionamento:</label>";
         controles += "      <select name='modoRele' class='select-modo'>";
@@ -1118,6 +1181,30 @@ String paginaPrincipal(int qtdRele,
         controles += "</div>";
     }
     html.replace("%CONTROLES%", controles);
+
+    String scriptJS = R"rawliteral(
+    <script>
+    // Função chamada no onblur do <h2 contenteditable="true">
+    function salvarNomeRele(releIndex, novoNome) {
+        // Remove espaços extras nas pontas, se quiser
+        novoNome = novoNome.trim();
+        if(!novoNome) return; // se vazio, não faz nada ou poderia mandar algo
+
+        // Fazemos um fetch GET para /salvarnome?rele=X&nome=...
+        fetch(`/salvarnome?rele=${releIndex}&nome=${encodeURIComponent(novoNome)}`)
+            .then(response => {
+                if(!response.ok){
+                    console.error("Erro ao salvar nome do relé:", response.statusText);
+                }
+            })
+            .catch(err => console.error("Erro fetch /salvarnome:", err));
+    }
+    </script>
+    </body>
+    </html>
+    )rawliteral";
+
+    html += scriptJS;
 
     return html;
 }
@@ -1252,6 +1339,30 @@ void configurarWebServer()
             request->send(400, "text/plain", "Parâmetros inválidos");
         } });
 
+    server.on("/salvarnome", HTTP_GET, [](AsyncWebServerRequest *request)
+              {
+    if (request->hasParam("rele") && request->hasParam("nome"))
+    {
+        int releIdx = request->getParam("rele")->value().toInt() - 1;
+        String novoNome = request->getParam("nome")->value();
+
+        if (releIdx >= 0 && releIdx < qtdRele)
+        {
+            // Salva no struct
+            rele[releIdx].nome = novoNome;
+            Serial.printf("Nome do Relé %d alterado para: %s\n", releIdx + 1, novoNome.c_str());
+            request->send(200, "text/plain", "OK");
+        }
+        else
+        {
+            request->send(400, "text/plain", "Relé inválido.");
+        }
+    }
+    else
+    {
+        request->send(400, "text/plain", "Parâmetros ausentes.");
+    } });
+
     // Exemplo de configuração de “tempo de entrada” separado (se você ainda precisar)
     server.on("/configurarentrada", HTTP_POST, [](AsyncWebServerRequest *request)
               {
@@ -1301,33 +1412,41 @@ void configurarWebServer()
     if (request->hasParam("rele", true))
     {
         int releIdx = request->getParam("rele", true)->value().toInt() - 1;
-
         if (releIdx >= 0 && releIdx < qtdRele)
         {
             // tempoPulso
-            if (request->hasParam("tempoPulso", true))
-            {
+            if (request->hasParam("tempoPulso", true)) {
                 int tPulso = request->getParam("tempoPulso", true)->value().toInt();
                 temposPulso[releIdx] = tPulso;
             }
 
             // tempoEntrada
-            if (request->hasParam("tempoEntrada", true))
-            {
+            if (request->hasParam("tempoEntrada", true)) {
                 int tEntrada = request->getParam("tempoEntrada", true)->value().toInt();
                 temposEntrada[releIdx] = tEntrada;
             }
 
-            // <-- NOVO: Captura o modoRele vindo do form
-            if (request->hasParam("modoRele", true))
-            {
+            // modoRele (se você tiver)
+            if (request->hasParam("modoRele", true)) {
                 int modo = request->getParam("modoRele", true)->value().toInt();
-                modoAcionamento[releIdx] = modo;  
+                modoAcionamento[releIdx] = modo;
             }
 
-            // Se usar horaAtivacao/horaDesativacao, continua igual
-            // ...
+            // Agora, SALVAMOS O NOME
+            if (request->hasParam("nomeRele", true)) {
+                String nome = request->getParam("nomeRele", true)->value();
+                rele[releIdx].nome = nome;
+            }
+
+            // horaAtivacao / horaDesativacao (opcional)
+            if (request->hasParam("horaAtivacao", true)) {
+                rele[releIdx].horaAtivacao = request->getParam("horaAtivacao", true)->value();
+            }
+            if (request->hasParam("horaDesativacao", true)) {
+                rele[releIdx].horaDesativacao = request->getParam("horaDesativacao", true)->value();
+            }
             
+            salvarConfiguracoes();
             request->redirect("/");
         }
         else
@@ -1498,6 +1617,12 @@ void setup()
         }
     }
 
+    rele[0].nome = "Relé 1";
+    rele[1].nome = "Relé 2";
+    rele[2].nome = "Relé 3";
+    rele[3].nome = "Relé 4";
+    rele[4].nome = "Relé 5";
+
     display.clearDisplay();
     display.setTextSize(1);
     display.setTextColor(WHITE);
@@ -1600,5 +1725,3 @@ void loop()
 
     delay(100); // Pequeno delay para evitar loops excessivos
 }
-
-// tempo do pulso, tempo do pulso da entrada, mostrar status do rele
