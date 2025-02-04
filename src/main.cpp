@@ -1671,6 +1671,10 @@ void loop()
     }
 
     delay(100); // Pequeno delay para evitar loops excessivos
+<<<<<<< HEAD
 }
 
 //teste
+=======
+
+>>>>>>> webserver
