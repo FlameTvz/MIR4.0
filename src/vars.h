@@ -58,10 +58,11 @@ public:
     const char *caminhoArquivo; // Caminho do arquivo no SPIFFS
     String horaAtivacao;        // Hora de ativação
     String horaDesativacao;     // Hora de desativação
+    String nome;
 
     Reles(int pino, int btn)
         : pino(pino), btn(btn), status(0), contador(0), caminhoArquivo(nullptr),
-          horaAtivacao(""), horaDesativacao("") {}
+          horaAtivacao(""), horaDesativacao(""), nome("") {}
 };
 
 Reles rele[5] = {
@@ -81,7 +82,9 @@ bool streamReiniciado = false;
 int temposEntrada[5] = {200, 200, 200, 200, 200};
 int temposPulso[5] = {200, 200, 200, 200, 200};
 bool relesAtivos[5] = {false, false, false, false, false};
+int modoAcionamento[5] = {2, 2, 2, 2, 2};
 
+int tempoEntrada = 200;
 // int tempoEntrada = 200;
 struct SwitchTask
 {

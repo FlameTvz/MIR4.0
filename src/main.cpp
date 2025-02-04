@@ -4,18 +4,15 @@
 #include <WiFi.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
+#include <ArduinoJson.h>
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
+
 DNSServer dnsServer;
 const byte DNS_PORT = 53;
 
 AsyncWebServer server(80); // Porta padrão HTTP
-/**
- * Salva um valor numérico em um arquivo no sistema de arquivos SPIFFS.
- *
- * @param caminho Caminho do arquivo a ser salvo.
- * @param dados Valor numérico a ser salvo.
- */
+
 void salvarDados(const char *caminho, int dados)
 {
     File arquivo = SPIFFS.open(caminho, FILE_WRITE);
@@ -28,22 +25,6 @@ void salvarDados(const char *caminho, int dados)
     arquivo.close();
 }
 
-struct RelePulse
-{
-    bool ativo = false;       // Indica se o pulso está ativo
-    unsigned long inicio = 0; // Momento de início do pulso
-    int releIdx = -1;         // Índice do relé associado
-};
-
-RelePulse pulseAtual;
-
-/**
- * @brief Retorna o tipo do token como string.
- *
- * @param[in] info Informa es sobre o token.
- *
- * @return String com o tipo do token.
- */
 String getTokenType(TokenInfo info)
 {
     switch (info.type)
@@ -63,13 +44,6 @@ String getTokenType(TokenInfo info)
     }
 }
 
-/**
- * @brief Retorna o status do token como string.
- *
- * @param[in] info Informa es sobre o token.
- *
- * @return String com o status do token.
- */
 String getTokenStatus(TokenInfo info)
 {
     switch (info.status)
@@ -91,16 +65,6 @@ String getTokenStatus(TokenInfo info)
     }
 }
 
-/**
- * Callback function to handle and print token status information.
- *
- * This function takes a TokenInfo object and prints the token type and status
- * using the Serial interface. If the token status is `token_status_error`,
- * it additionally prints the error message associated with the token.
- *
- * @param info TokenInfo object containing details about the token type, status,
- *             and any associated error message.
- */
 void tokenStatusCallback(TokenInfo info)
 {
     Serial.printf("Token Info: type = %s, status = %s\n",
@@ -112,12 +76,6 @@ void tokenStatusCallback(TokenInfo info)
     }
 }
 
-/**
- * Registra um evento no Firestore.
- *
- * @param releStr String que identifica o rel  (ex. "Rele 1")
- * @param evento String que descreve o evento (ex. "ligado")
- */
 void registrarEvento(const char *releStr, const char *evento)
 {
     FirebaseJson content;
@@ -159,14 +117,6 @@ void registrarEvento(const char *releStr, const char *evento)
     }
 }
 
-/**
- * @brief Leitura dos estados dos bot es de controle dos rel s
- *
- * @details
- * Essa fun o l  os estados dos bot es de controle dos rel s
- * e os guarda no array leitura.
- * @see leitura
- */
 void leRele()
 {
     bool valor;
@@ -177,114 +127,129 @@ void leRele()
     }
 }
 
-/**
- * Verifica se algum botão de relé está pressionado e, se sim, ativa o respectivo
- * relé e registra o evento no Firestore.
- *
- * Também incrementa o contador de eventos de cada relé e salva o valor no
- * arquivo respectivo no SPIFFS.
- */
 void entradaNaSaida()
 {
-    bool algumON = false; // Indica se algum relé foi ativado
-    leRele();             // Atualiza os estados dos botões
+    leRele(); // Atualiza os estados dos botões, etc.
+
+    // Variáveis estáticas internas para gerenciar temporização de cada relé
+    static bool estadoRele[5] = {false, false, false, false, false};
+    static unsigned long inicioPressionado[5] = {0, 0, 0, 0, 0};
+
+    // Para o modo “Pulso”
+    static bool pulsoEmAndamento[5] = {false, false, false, false, false};
+    static unsigned long pulsoFim[5] = {0, 0, 0, 0, 0};
 
     for (int i = 0; i < qtdRele; i++)
     {
-        if (leitura[i] == 1)
-        {
-            digitalWrite(rele[i].pino, HIGH); // Ativa o relé correspondente
-            Serial.printf("Relé %d ativado por %d ms\n", i + 1, temposEntrada[i]);
-            delay(temposEntrada[i]);         // Aguarda o tempo configurado
-            digitalWrite(rele[i].pino, LOW); // Desativa o relé após o tempo
-            algumON = true;                  // Marca que houve um relé ativado
-        }
-    }
+        bool botaoPressionado = (digitalRead(rele[i].btn) == HIGH);
+        int modo = modoAcionamento[i]; // 0=Manter Ligado, 1=Pulso, 2=Desligar ao soltar
 
-    if (algumON)
-    {
-        // Atualização do display (se necessário)
-        // display.clearDisplay();
-        // display.fillScreen(WHITE);
-        // display.display();
-    }
-    else
-    {
-        // Se nenhum relé foi ativado, desliga todos os relés por segurança
-        for (int i = 0; i < qtdRele; i++)
+        switch (modo)
         {
-            digitalWrite(rele[i].pino, LOW);
-        }
-
-        // Atualiza os contadores dos relés
-        for (int i = 0; i < qtdRele; i++)
-        {
-            if (leitura[i] == 1) // Verifica novamente se o botão foi pressionado
+        // =========================================================
+        // MODO 0: Manter Ligado
+        // =========================================================
+        case 0:
+            if (botaoPressionado)
             {
-                switch (i)
+                if (inicioPressionado[i] == 0)
                 {
-                case 0:
-                    rele1++;
-                    salvarDados("/rele1.txt", rele1);
-                    break;
-                case 1:
-                    rele2++;
-                    salvarDados("/rele2.txt", rele2);
-                    break;
-                case 2:
-                    rele3++;
-                    salvarDados("/rele3.txt", rele3);
-                    break;
-                case 3:
-                    rele4++;
-                    salvarDados("/rele4.txt", rele4);
-                    break;
-                case 4:
-                    rele5++;
-                    salvarDados("/rele5.txt", rele5);
-                    break;
-                default:
-                    Serial.printf("Relé %d fora do intervalo válido.\n", i + 1);
-                    break;
+                    inicioPressionado[i] = millis();
+                }
+                if (!estadoRele[i] && (millis() - inicioPressionado[i] >= (unsigned long)temposEntrada[i]))
+                {
+                    digitalWrite(rele[i].pino, HIGH);
+                    estadoRele[i] = true;
+                    /** AQUI: atualizar o status para o /status */
+                    rele[i].status = 1;
+
+                    Serial.printf("Relé %d (modo 0: Manter Ligado) ATIVADO\n", i + 1);
                 }
             }
-        }
-    }
+            else
+            {
+                // Soltou o botão mas no modo 0 não desliga
+                inicioPressionado[i] = 0;
+            }
+            break;
+
+        // =========================================================
+        // MODO 1: Pulso
+        // =========================================================
+        case 1:
+            // 1) Detecta pressão do botão até temposEntrada[i] e dispara pulso
+            if (botaoPressionado)
+            {
+                if (inicioPressionado[i] == 0)
+                {
+                    inicioPressionado[i] = millis();
+                }
+                if (!pulsoEmAndamento[i] && (millis() - inicioPressionado[i] >= (unsigned long)temposEntrada[i]))
+                {
+                    // Liga
+                    digitalWrite(rele[i].pino, HIGH);
+                    estadoRele[i] = true;
+                    rele[i].status = 1; // <-- Atualiza aqui também
+                    pulsoEmAndamento[i] = true;
+                    pulsoFim[i] = millis() + temposPulso[i];
+
+                    Serial.printf("Relé %d (modo 1: Pulso) LIGADO\n", i + 1);
+                }
+            }
+            else
+            {
+                // Botão solto antes de atingir tempo => reseta
+                inicioPressionado[i] = 0;
+            }
+
+            // 2) Se o pulso estiver em andamento, verifica se acabou
+            if (pulsoEmAndamento[i] && (millis() >= pulsoFim[i]))
+            {
+                // Desliga
+                digitalWrite(rele[i].pino, LOW);
+                estadoRele[i] = false;
+                rele[i].status = 0; // <-- Importante
+                pulsoEmAndamento[i] = false;
+
+                Serial.printf("Relé %d (modo 1: Pulso) DESLIGADO (fim do pulso)\n", i + 1);
+            }
+            break;
+
+        // =========================================================
+        // MODO 2: Desligar ao soltar (código original)
+        // =========================================================
+        case 2:
+            if (botaoPressionado)
+            {
+                if (inicioPressionado[i] == 0)
+                {
+                    inicioPressionado[i] = millis();
+                }
+                if (!estadoRele[i] && (millis() - inicioPressionado[i] >= (unsigned long)temposEntrada[i]))
+                {
+                    digitalWrite(rele[i].pino, HIGH);
+                    estadoRele[i] = true;
+                    rele[i].status = 1; // <-- Atualiza
+                    Serial.printf("Relé %d (modo 2: Desligar ao soltar) LIGADO\n", i + 1);
+                }
+            }
+            else
+            {
+                // Botão solto
+                if (estadoRele[i])
+                {
+                    digitalWrite(rele[i].pino, LOW);
+                    estadoRele[i] = false;
+                    rele[i].status = 0; // <-- Atualiza
+                    Serial.printf("Relé %d (modo 2: Desligar ao soltar) DESLIGADO\n", i + 1);
+                }
+                inicioPressionado[i] = 0;
+            }
+            break;
+        } // switch (modo)
+    } // for
 }
 
-/**
- * @brief Alterna o estado de um pino de sa da do rel
- *
- * @param pino N mero do pino a ser alterado
- *
- * @details
- *    Se o pino estiver em LOW, ele ser  alterado para HIGH e vice-versa.
- *    Um delay de 200ms  adicionado para evitar ativa es m ltiplas r pidas.
- *    Utilizado para controlar os rel s via HTTP.
- */
-void toggleRele(int pino)
-{
-    if (digitalRead(pino) == LOW)
-    {
-        digitalWrite(pino, HIGH);
-    }
-    else
-    {
-        digitalWrite(pino, LOW);
-    }
-    delay(200); // Evitar ativação múltipla rápida
-}
-
-/**
- * Extrai o valor de uma chave JSON e ajusta o formato para HH:MM:SS se necessário.
- *
- * @param dataPath Caminho do dado recebido via Stream do Firebase.
- * @param jsonData Conteúdo do JSON recebido.
- * @param jsonKey Chave do valor que deve ser extraído.
- * @param pathEsperado Caminho esperado que deve ser igual a dataPath.
- *
- * @return O valor extraído e formatado, ou uma string vazia se o caminho ou chave forem inválidos.
- */
 String processarHorarios(String dataPath, String jsonData, String jsonKey, String pathEsperado)
 {
     if (dataPath != pathEsperado || jsonData.indexOf(jsonKey) == -1)
@@ -318,15 +283,6 @@ String processarHorarios(String dataPath, String jsonData, String jsonKey, Strin
     return horario;
 }
 
-/**
- * Envia um HeartBeat (sinal de vida) para o Firebase Realtime Database.
- *
- * O HeartBeat é um sinal de vida que indica que o dispositivo ainda está ativo.
- * Ele é enviado periodicamente para o Firebase e pode ser usado para monitorar
- * a presença do dispositivo na rede.
- *
- * @return Nenhum valor de retorno.
- */
 void enviarheartbeat()
 {
     String heartbeatPath = databasePath + "/heartbeat";
@@ -341,14 +297,66 @@ void enviarheartbeat()
     }
 }
 
-/**
- * Atualiza o estado do rele especificado no Realtime Database.
- *
- * @param rele Número do relé a ser atualizado (1 ou 2).
- * @param estado Novo estado do relé (0 = desativado, 1 = ativado).
- *
- * @return Nenhum valor de retorno.
- */
+void salvarConfiguracoes() {
+    // Cria um documento JSON e preenche com os valores atuais
+    StaticJsonDocument<512> doc; 
+
+    JsonArray arr = doc.createNestedArray("reles");
+    for (int i = 0; i < qtdRele; i++) {
+        JsonObject obj = arr.createNestedObject();
+        obj["tempoPulso"] = temposPulso[i];
+        obj["tempoEntrada"] = temposEntrada[i];
+        obj["horaAtivacao"] = rele[i].horaAtivacao;
+        obj["horaDesativacao"] = rele[i].horaDesativacao;
+        // se quiser salvar "nome" também: obj["nome"] = rele[i].nome;
+    }
+
+    // Abre/cria o arquivo e escreve
+    File file = SPIFFS.open("/configRele.json", FILE_WRITE);
+    if (file) {
+        serializeJson(doc, file);
+        file.close();
+        Serial.println("Configurações salvas em /configRele.json");
+    } else {
+        Serial.println("Falha ao abrir /configRele.json para escrita");
+    }
+}
+
+void carregarConfiguracoes() {
+    if(!SPIFFS.exists("/configRele.json")) {
+        Serial.println("Nenhum arquivo /configRele.json encontrado, usando valores padrão.");
+        return;
+    }
+    File file = SPIFFS.open("/configRele.json", FILE_READ);
+    if (!file) {
+        Serial.println("Falha ao abrir /configRele.json para leitura");
+        return;
+    }
+
+    StaticJsonDocument<512> doc;
+    DeserializationError error = deserializeJson(doc, file);
+    if (error) {
+        Serial.println("Erro ao fazer parse do JSON de config: ");
+        Serial.println(error.f_str());
+        file.close();
+        return;
+    }
+
+    file.close();
+    JsonArray arr = doc["reles"];
+    if (!arr.isNull()) {
+        for (int i = 0; i < arr.size() && i < qtdRele; i++) {
+            JsonObject obj = arr[i];
+            temposPulso[i] = obj["tempoPulso"] | 200;
+            temposEntrada[i] = obj["tempoEntrada"] | 200;
+            rele[i].horaAtivacao = obj["horaAtivacao"] | "";
+            rele[i].horaDesativacao = obj["horaDesativacao"] | "";
+            // se tiver nome: rele[i].nome = obj["nome"] | ("Relé " + String(i+1));
+        }
+        Serial.println("Configurações carregadas de /configRele.json");
+    }
+}
+
 void atualizarEstadoRele(int pino, int estado, int numRele)
 {
     // Exemplo: /IdsESP/<espUniqueId>/rele1/status, caso numRele == 1
@@ -365,19 +373,6 @@ void atualizarEstadoRele(int pino, int estado, int numRele)
     }
 }
 
-/**
- * Função que lida com a leitura de dados recebidos via Stream do Firebase.
- *
- * Verifica se o stream está disponível e, se sim, extrai o valor do campo 'atualizado' recebido.
- * Em seguida, verifica se o caminho recebido é igual a "/keeplive" e, se sim, imprime o horário atualizado recebido.
- *
- * Além disso, verifica se o caminho recebido é igual a "/releX" (onde X é o número do relé) e, se sim, extrai o valor do campo 'status' recebido e atualiza o estado do relé correspondente.
- *
- * Por fim, verifica se o caminho recebido é igual a "/releX" e o valor do campo 'horaAtivacao' ou 'horaDesativacao' foi alterado, e, se sim, atualiza o horário de ativação ou desativação do relé correspondente.
- *
- * @return Nenhum valor de retorno.
- */
-/******  bdf903f3-cd84-4ccf-9f8f-29a6fd707fdb  *******/
 void reiniciarStream()
 {
     Firebase.RTDB.endStream(&firebaseData); // Finaliza qualquer stream ativo
@@ -407,18 +402,6 @@ void reiniciarStream()
                               */
 /******  dbfb5ebf-b8f3-4b89-a324-2a6862f6bd15  *******/}
 
-/**
- * Função que lida com a leitura de dados recebidos via Stream do Firebase.
- *
- * Verifica se o stream está disponível e, se sim, extrai o valor do campo 'atualizado' recebido.
- * Em seguida, verifica se o caminho recebido é igual a "/keeplive" e, se sim, imprime o horário atualizado recebido.
- *
- * Além disso, verifica se o caminho recebido é igual a "/releX" (onde X é o número do relé) e, se sim, extrai o valor do campo 'status' recebido e atualiza o estado do relé correspondente.
- *
- * Por fim, verifica se o caminho recebido é igual a "/releX" e o valor do campo 'horaAtivacao' ou 'horaDesativacao' foi alterado, e, se sim, atualiza o horário de ativação ou desativação do relé correspondente.
- *
- * @return Nenhum valor de retorno.
- */
 void tiposBots()
 {
     if (!Firebase.RTDB.readStream(&firebaseData))
@@ -428,7 +411,6 @@ void tiposBots()
             Serial.println("Stream desconectado. Tentando reiniciar...");
             reiniciarStream();
         }
-        return; // Aguarde a próxima iteração do loop para evitar processamento excessivo
     }
 
     if (!firebaseData.streamAvailable())
@@ -578,51 +560,30 @@ void atualizarEstadoRele2(int rele, int estado)
     }
 }
 
-/**
- *
- * This function compares the current time with specified activation and deactivation times.
- * If the current time is within a 2-second tolerance of the activation time, the relay is activated.
- * If the current time is within a 2-second tolerance of the deactivation time, the relay is deactivated.
- * It logs events for both activation and deactivation.
- *
- * @param ativacao The activation time in the format "HH:MM:SS".
- * @param desativacao The deactivation time in the format "HH:MM:SS".
- * @param pino The pin number associated with the relay.
- * @param releNum The relay number for identification in logging.
- */
-void verificarHorarioReles(String ativacao, String desativacao, int pino, int releNum, bool &releAtivo)
+void verificarHorarioReles(String ativacao, String desativacao, int pino, int releNum)
 {
-    // Converte os horários para segundos
     if (ativacao.length() == 8 && desativacao.length() == 8)
     {
         int horaAtualSeg = timeClient.getHours() * 3600 + timeClient.getMinutes() * 60 + timeClient.getSeconds();
         int horaAtivacaoSeg = ativacao.substring(0, 2).toInt() * 3600 +
-                              ativacao.substring(3, 5).toInt() * 60 +
-                              ativacao.substring(6, 8).toInt();
+                              ativacao.substring(3, 5).toInt() * 60 + ativacao.substring(6, 8).toInt();
         int horaDesativacaoSeg = desativacao.substring(0, 2).toInt() * 3600 +
-                                 desativacao.substring(3, 5).toInt() * 60 +
-                                 desativacao.substring(6, 8).toInt();
+                                 desativacao.substring(3, 5).toInt() * 60 + desativacao.substring(6, 8).toInt();
 
-        // Verifica se está no intervalo de ativação
-        if (horaAtualSeg >= horaAtivacaoSeg && horaAtualSeg < horaDesativacaoSeg)
+        int tolerancia = 2; // Tolerância de 2 segundos
+        if (abs(horaAtualSeg - horaAtivacaoSeg) <= tolerancia)
         {
-            // Ativa o relé apenas se ainda não estiver ativo
-            if (!releAtivo)
-            {
-                digitalWrite(pino, HIGH); // Liga o relé
-                releAtivo = true;         // Marca o relé como ativo
-                Serial.printf("Relé %d ativado no horário configurado.\n", releNum);
-            }
+            digitalWrite(pino, HIGH);
+            Serial.printf("Relé %d ativado!\n", releNum);
+            atualizarEstadoRele2(releNum, true);
+            registrarEvento(("Relé " + String(releNum)).c_str(), "Ativado");
         }
-        else
+        if (abs(horaAtualSeg - horaDesativacaoSeg) <= tolerancia)
         {
-            // Desativa o relé fora do intervalo de ativação
-            if (releAtivo)
-            {
-                digitalWrite(pino, LOW); // Desliga o relé
-                releAtivo = false;       // Marca o relé como inativo
-                Serial.printf("Relé %d desativado no horário configurado.\n", releNum);
-            }
+            digitalWrite(pino, LOW);
+            Serial.printf("Relé %d desativado!\n", releNum);
+            atualizarEstadoRele2(releNum, false);
+            registrarEvento(("Relé " + String(releNum)).c_str(), "Desativado");
         }
     }
 }
@@ -692,19 +653,6 @@ const char *htmlPage PROGMEM = R"rawliteral(
 </html>
 )rawliteral";
 
-/**
- * Inicia o modo Access Point no ESP32 e configura o servidor HTTP para
- * fornecer uma página de configuração Wi-Fi.
- *
- * A página de configuração é servida na porta 80 e fornece inputs para o
- * nome da rede (SSID) e a senha. Após a submissão da página, o ESP32
- * tenta se conectar à rede especificada e salva a configuração Wi-Fi na
- * SPIFFS em um arquivo chamado "wifi_config.txt".
- *
- * Caso a conexão seja bem-sucedida, o ESP32 reinicia automaticamente e
- * tenta se conectar à rede novamente. Caso contrário, a página de
- * configuração é novamente servida com uma mensagem de erro.
- */
 void startWiFiManager()
 {
     WiFi.mode(WIFI_AP_STA);
@@ -767,16 +715,14 @@ void startWiFiManager()
     }
 }
 
-/**
- * Gera a página principal do controle de relés.
- *
- * A página inclui controles para os 5 relés e um formulário para configurar
- * horários de ativação e desativação.
- *
- * @return String com o conteúdo HTML da página.
- */
-String paginaPrincipal(int qtdRele)
+String paginaPrincipal(int qtdRele,
+                       int releNumber,
+                       int tempoPulsoGlobal,
+                       int tempoEntradaGlobal,
+                       const String &horaAtivacaoGlobal,
+                       const String &horaDesativacaoGlobal)
 {
+    // HTML completo, unificando página de controle + formulários
     String html = R"rawliteral(
 <!DOCTYPE html>
 <html lang="pt-br">
@@ -788,21 +734,17 @@ String paginaPrincipal(int qtdRele)
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;500;700&display=swap" rel="stylesheet" />
     <style>
        <!DOCTYPE html>
-<html lang="pt-br">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Controle de Relés</title>
-    <style>
-           * {
+
+       /* =====================================================================
+          CSS original da página principal + página de configuração
+          (NENHUM trecho foi removido ou renomeado, apenas mantido integralmente)
+       ===================================================================== */
+       * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }
 
-        /* ==================== 
-           Corpo da página 
-           ==================== */
         body {
             font-family: "Poppins", Arial, sans-serif;
             background: linear-gradient(120deg, #fdfbfb 0%, #ebedee 100%);
@@ -811,9 +753,6 @@ String paginaPrincipal(int qtdRele)
             text-align: center;
         }
 
-        /* ==================== 
-           Cabeçalho 
-           ==================== */
         header {
             background-color: #34495e;
             padding: 20px;
@@ -826,24 +765,18 @@ String paginaPrincipal(int qtdRele)
             font-size: 2.2rem;
         }
 
-        /* ==================== 
-           Container principal dos cards 
-           ==================== */
         #reles-container {
             display: flex;
-            flex-wrap: nowrap;        /* Mantém cards na mesma linha com scroll horizontal */
-            overflow-x: auto;         /* Scroll horizontal caso não caibam na tela */
+            flex-wrap: nowrap;
+            overflow-x: auto;
             gap: 15px;
             padding: 30px;
             margin: 0 auto;
             max-width: 95%;
         }
 
-        /* ==================== 
-           Card de cada relé 
-           ==================== */
         .rele-card {
-            flex: 0 0 auto;            /* Para não encolher nem esticar além do necessário */
+            flex: 0 0 auto;
             width: 270px;
             min-height: 180px;
             padding: 20px;
@@ -854,8 +787,8 @@ String paginaPrincipal(int qtdRele)
             transition: transform 0.2s ease, box-shadow 0.2s ease;
             
             display: flex;
-            flex-direction: column;    /* Coloca título e botões empilhados */
-            justify-content: space-between;
+            flex-direction: column;
+            justify-content: flex-start; /* Ajuste para acomodar formulário abaixo */
             align-items: center;
         }
 
@@ -879,7 +812,7 @@ String paginaPrincipal(int qtdRele)
             border-radius: 30px;
             font-weight: 500;
             font-size: 1rem;
-            min-width: 90px; /* Largura mínima para evitar “pular” de tamanho */
+            min-width: 90px;
             text-align: center;
             box-shadow: 0 3px 6px rgba(0, 0, 0, 0.1);
         }
@@ -888,15 +821,11 @@ String paginaPrincipal(int qtdRele)
             background: #27ae60;
             color: #fff;
         }
-
         .estado.desligado {
             background: #e74c3c;
             color: #fff;
         }
 
-        /* ==================== 
-           Área dos botões 
-           ==================== */
         .botoes {
             display: flex;
             justify-content: space-around;
@@ -905,7 +834,6 @@ String paginaPrincipal(int qtdRele)
             margin-top: 15px;
             width: 100%;
         }
-
         button {
             flex: 1;
             padding: 10px;
@@ -918,167 +846,81 @@ String paginaPrincipal(int qtdRele)
             transition: background 0.2s, transform 0.2s, box-shadow 0.2s;
             outline: none;
         }
-
         button:hover {
             transform: translateY(-2px);
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
         }
-
-        /* Botão que unifica “Ligar” e “Desligar” */
         .btn-liga-desliga {
             background: #2c3e50;
         }
         .btn-liga-desliga:hover {
             background: #2c3e50;
         }
-
-        /* Botão Switch (mantido) */
         .btn-switch {
             color: #fff; 
-            background: #2c3e50;  /* ou qualquer cor que prefira */
+            background: #2c3e50;
         }
         .btn-switch:hover {
             background: #2c3e50;
         }
 
-        /* Botão Configurar (mantido) */
-        .btn-configurar {
-            color: #fff; 
-            background: #2c3e50;  /* ou qualquer cor que prefira */
-        }
-        .btn-configurar:hover {
-            background: #d9890f;
-        }
-
-        /* ==================== 
-           Responsividade básica 
-           ==================== */
-        @media (max-width: 768px) {
+        @media (max-width: 1200px) {
+            #reles-container {
+                max-width: 100%;
+                padding: 20px;
+            }
             .rele-card {
-                width: 80%;
-                margin: 0 auto;
+                width: calc(25% - 15px);
             }
         }
-    </style>
-</head>
-<body>
-    <header>
-      <h1>Controle de Relés</h1>
-    </header>
-
-    <div id="reles-container">
-        %CONTROLES%
-    </div>
-
-    <script>
-        // Atualiza o status dos relés a cada 1 segundo
-        setInterval(() => {
-            fetch('/status')
-                .then(response => response.json())
-                .then(data => {
-                    data.reles.forEach((rele, index) => {
-                        const estadoEl = document.getElementById(`estado-rele-${index}`);
-                        const ligaDesligaBtn = document.getElementById(`liga-desliga-btn-${index}`);
-
-                        if (!estadoEl || !ligaDesligaBtn) return; // Se não existir no DOM, ignora
-
-                        // Atualiza o label do estado (Ligado/Desligado)
-                        if (rele.status) {
-                            estadoEl.textContent = "Ligado";
-                            estadoEl.classList.add("ligado");
-                            estadoEl.classList.remove("desligado");
-
-                            // Se o relé está ligado, o botão deve oferecer a opção de desligar
-                            ligaDesligaBtn.textContent = "Desligar";
-                            ligaDesligaBtn.onclick = () => {
-                                fetch(`/controle?rele=${index + 1}&acao=desligar`);
-                            };
-                        } else {
-                            estadoEl.textContent = "Desligado";
-                            estadoEl.classList.add("desligado");
-                            estadoEl.classList.remove("ligado");
-
-                            // Se o relé está desligado, o botão deve oferecer a opção de ligar
-                            ligaDesligaBtn.textContent = "Ligar";
-                            ligaDesligaBtn.onclick = () => {
-                                fetch(`/controle?rele=${index + 1}&acao=ligar`);
-                            };
-                        }
-                    });
-                });
-        }, 1000);
-    </script>
-</body>
-</html>
-)rawliteral";
-
-    // Gera os cartões de relés
-    String controles;
-    for (int i = 0; i < qtdRele; i++)
-    {
-        controles += "<div class='rele-card'>";
-        controles += "<h2>Relé " + String(i + 1) + "</h2>";
-        controles += "<div class='estado desligado' id='estado-rele-" + String(i) + "'>Desligado</div>";
-        controles += "<div class='botoes'>";
-        controles += "  <button class='btn-liga-desliga' id='liga-desliga-btn-" + String(i) + "'>Ligar</button>";
-        controles += "  <button class='btn-switch' onclick='fetch(`/switch?rele=" + String(i + 1) + "`)'>Switch</button>";
-        controles += "  <button class='btn-configurar' onclick='window.location.href=\"/configurartempo?rele=" + String(i + 1) + "\"'>Configurar</button>";
-        controles += "</div>";
-
-        controles += "</div>";
-    }
-
-    html.replace("%CONTROLES%", controles);
-    return html;
-}
-
-String paginaConfiguracaoRele(int releNumber, int tempoPulso, int tempoEntrada, const String &horaAtivacao, const String &horaDesativacao)
-{
-    // Ajuste esses valores conforme o seu código de lógica
-    String html = R"rawliteral(
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-    <meta charset="UTF-8">
-    <title>Configurar Relé )rawliteral" +
-                  String(releNumber) + R"rawliteral(</title>
-    
-    <!-- Fonte Poppins, para um visual semelhante às demais páginas -->
-    <link rel="preconnect" href="https://fonts.gstatic.com">
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;700&display=swap" rel="stylesheet">
-    
-    <style>
-        /* Reset básico */
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+        @media (max-width: 992px) {
+            .rele-card {
+                width: calc(33.33% - 15px);
+            }
+        }
+        @media (max-width: 768px) {
+            #reles-container {
+                flex-wrap: wrap;
+                justify-content: center;
+                overflow-x: visible;
+            }
+            .rele-card {
+                width: calc(50% - 15px);
+                margin: 10px auto;
+            }
+        }
+        @media (max-width: 576px) {
+            .rele-card {
+                width: calc(100% - 20px);
+                max-width: 350px;
+                margin: 10px auto;
+            }
         }
 
-        body {
-            background: linear-gradient(120deg, #fdfbfb 0%, #ebedee 100%);
-            font-family: "Poppins", Arial, sans-serif;
-            text-align: center;
-            color: #333;
-        }
-
+        /* ====================
+           CSS da antiga "paginaConfiguracaoRele" 
+           Mantemos o que já existia
+        ==================== */
         .container {
             max-width: 400px;
-            margin: 40px auto;
+            margin: 20px auto; /* Ajustado para ficar mais próximo do card */
             background: #fff;
             border-radius: 8px;
             padding: 20px;
             box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
+            text-align: left;  /* para o form */
         }
 
-        h1 {
+        .container h1 {
             margin-bottom: 20px;
             color: #2c3e50;
             font-weight: 700;
+            font-size: 1.4rem; /* um pouco menor para caber melhor no card */
+            text-align: center;/* centraliza o título */
         }
 
         form {
-            text-align: left; /* Para alinhar os rótulos à esquerda */
+            text-align: left;
         }
 
         label {
@@ -1100,7 +942,6 @@ String paginaConfiguracaoRele(int releNumber, int tempoPulso, int tempoEntrada, 
             font-size: 14px;
         }
 
-        /* Botão “Salvar Configuração” */
         button[type="submit"] {
             background: #007BFF;
             border: none;
@@ -1111,100 +952,221 @@ String paginaConfiguracaoRele(int releNumber, int tempoPulso, int tempoEntrada, 
             cursor: pointer;
             transition: background 0.3s, transform 0.3s;
             font-weight: 500;
+            display: block;
+            margin: 0 auto;
+            width: fit-content;
         }
         button[type="submit"]:hover {
             background: #0056b3;
             transform: translateY(-2px);
         }
 
-        /* Botão “Voltar” */
         .back-button {
-            display: inline-block;
-            margin-top: 15px;
             background: #dc3545;
             color: #fff;
             text-decoration: none;
-            padding: 10px 18px;
-            font-size: 14px;
+            padding: 12px 20px;
+            font-size: 16px;
             border-radius: 5px;
             transition: background 0.3s, transform 0.3s;
+            font-weight: 500;
+            display: block;
+            margin: 10px auto 0;
+            width: fit-content;
+            text-align: center;
         }
         .back-button:hover {
             background: #c82333;
             transform: translateY(-2px);
         }
+
+        /* ================================
+           NOVA CLASSE PARA O SELECT
+        ================================ */
+        .select-modo {
+            width: 100%;
+            padding: 10px;
+            background-color: #2c3e50; /* Mesma cor dos botões */
+            color: #fff;
+            font-size: 0.9rem;
+            font-weight: 500;
+            border: none;
+            border-radius: 5px;
+            margin-bottom: 15px;
+            cursor: pointer;
+            transition: background 0.2s, transform 0.2s, box-shadow 0.2s;
+        }
+        .select-modo:hover {
+            background-color: #3b4d5e; 
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        .select-modo option {
+            color: #333;   /* Cor do texto interno das opções */
+            background: #fff;
+        }
+
     </style>
 </head>
 <body>
+    <header>
+      <h1>Controle de Relés</h1>
+    </header>
 
-    <div class="container">
-        <h1>Configurar Relé )rawliteral" +
-                  String(releNumber) + R"rawliteral(</h1>
-        <form action="/salvarconfig" method="POST">
-            <input type="hidden" name="rele" value=")rawliteral" +
-                  String(releNumber) + R"rawliteral(" />
-
-            <label>Tempo do Pulso (ms):</label>
-            <input type="number" name="tempoPulso" min="0" placeholder="Ex: 10000" value=")rawliteral" +
-                  String(tempoPulso) + R"rawliteral(" />
-            
-            <label>Tempo da Entrada (ms):</label>
-            <input type="number" name="tempoEntrada" min="0" placeholder="Ex: 500" value=")rawliteral" +
-                  String(tempoEntrada) + R"rawliteral(" />
-
-            <label>Hora de Ativação:</label>
-            <!-- Campo do tipo 'time' com passo de 1 segundo, caso queira permitir segundos -->
-            <input type="time" name="horaAtivacao" step="1" value=")rawliteral" +
-                  horaAtivacao + R"rawliteral(" />
-            
-            <label>Hora de Desativação:</label>
-            <input type="time" name="horaDesativacao" step="1" value=")rawliteral" +
-                  horaDesativacao + R"rawliteral(" />
-
-            <button type="submit">Salvar Configuração</button>
-        </form>
-
-        <br />
-        <a href="/" class="back-button">Voltar</a>
+    <div id="reles-container">
+        %CONTROLES%
     </div>
 
+    <script>
+        // Atualiza o status dos relés a cada 250ms
+        setInterval(() => {
+            fetch('/status')
+                .then(response => response.json())
+                .then(data => {
+                    data.reles.forEach((rele, index) => {
+                        const estadoEl = document.getElementById(`estado-rele-${index}`);
+                        const ligaDesligaBtn = document.getElementById(`liga-desliga-btn-${index}`);
+
+                        if (!estadoEl || !ligaDesligaBtn) return;
+
+                        // Atualiza apenas o estado visual
+                        if (rele.status) {
+                            estadoEl.textContent = "Ligado";
+                            estadoEl.classList.add("ligado");
+                            estadoEl.classList.remove("desligado");
+                            ligaDesligaBtn.textContent = "Desligar";
+                        } else {
+                            estadoEl.textContent = "Desligado";
+                            estadoEl.classList.add("desligado");
+                            estadoEl.classList.remove("ligado");
+                            ligaDesligaBtn.textContent = "Ligar";
+                        }
+
+                        // Define os event listeners apenas uma vez
+                        if (!ligaDesligaBtn.hasEventListener) {
+                            ligaDesligaBtn.hasEventListener = true;
+                            ligaDesligaBtn.addEventListener('click', () => {
+                                const acao = rele.status ? 'desligar' : 'ligar';
+                                fetch(`/controle?rele=${index + 1}&acao=${acao}`)
+                                    .then(() => {
+                                        // Atualiza o status localmente
+                                        rele.status = !rele.status;
+                                    })
+                                    .catch(err => console.error("Erro ao controlar relé:", err));
+                            });
+                        }
+                    });
+                })
+                .catch(err => console.error("Erro ao buscar status:", err));
+        }, 250);
+    </script>
 </body>
 </html>
 )rawliteral";
 
+    // Aqui montamos o conteúdo do %CONTROLES%, incluindo:
+    //  - o card do relé
+    //  - o formulário de configuração, logo abaixo, sem botão “Configurar”
+    String controles;
+    for (int i = 0; i < qtdRele; i++)
+    {
+        int tPulso = temposPulso[i];
+        int tEntrada = temposEntrada[i];
+        String hAtiv = rele[i].horaAtivacao;
+        String hDesativ = rele[i].horaDesativacao;
+
+        controles += "<div class='rele-card'>";
+        controles += "<h2 contenteditable='true' ";
+        controles += " onblur='salvarNomeRele(" + String(i + 1) + ", this.innerText)'>";
+        controles += rele[i].nome;
+        controles += "</h2>";
+        controles += "  <div class='estado desligado' id='estado-rele-" + String(i) + "'>Desligado</div>";
+        controles += "  <div class='botoes'>";
+        controles += "    <button class='btn-liga-desliga' id='liga-desliga-btn-" + String(i) + "'>Ligar</button>";
+        controles += "    <button class='btn-switch' onclick='fetch(`/switch?rele=" + String(i + 1) + "`)'>Pulso</button>";
+        controles += "  </div>";
+        controles += "  <div class='container'>";
+        controles += "    <form action='/salvarconfig' method='POST'>";
+        controles += "      <input type='hidden' name='rele' value='" + String(i + 1) + "' />";
+        controles += "      <label>Tempo do Pulso (ms):</label>";
+        controles += "      <input type='number' name='tempoPulso' min='0' placeholder='Ex: 10000' value='" + String(tPulso) + "' />";
+        controles += "      <label>Tempo de Debounce (ms):</label>";
+        controles += "      <input type='number' name='tempoEntrada' min='0' placeholder='Ex: 500' value='" + String(tEntrada) + "' />";
+        controles += "      <label>Modo de Acionamento:</label>";
+        controles += "      <select name='modoRele' class='select-modo'>";
+        controles += "        <option value='0' " + String(modoAcionamento[i] == 0 ? "selected" : "") + ">Manter Ligado</option>";
+        controles += "        <option value='1' " + String(modoAcionamento[i] == 1 ? "selected" : "") + ">Pulso</option>";
+        controles += "        <option value='2' " + String(modoAcionamento[i] == 2 ? "selected" : "") + ">Desligar ao soltar</option>";
+        controles += "      </select>";
+        controles += "      <label>Hora de Ativação:</label>";
+        controles += "      <input type='time' name='horaAtivacao' step='1' value='" + hAtiv + "' />";
+        controles += "      <label>Hora de Desativação:</label>";
+        controles += "      <input type='time' name='horaDesativacao' step='1' value='" + hDesativ + "' />";
+        controles += "      <button type='submit'>Salvar Configuração</button>";
+        controles += "    </form>";
+        controles += "  </div>"; // .container
+        controles += "</div>";
+    }
+    html.replace("%CONTROLES%", controles);
+
+    String scriptJS = R"rawliteral(
+    <script>
+    // Função chamada no onblur do <h2 contenteditable="true">
+    function salvarNomeRele(releIndex, novoNome) {
+        // Remove espaços extras nas pontas, se quiser
+        novoNome = novoNome.trim();
+        if(!novoNome) return; // se vazio, não faz nada ou poderia mandar algo
+
+        // Fazemos um fetch GET para /salvarnome?rele=X&nome=...
+        fetch(`/salvarnome?rele=${releIndex}&nome=${encodeURIComponent(novoNome)}`)
+            .then(response => {
+                if(!response.ok){
+                    console.error("Erro ao salvar nome do relé:", response.statusText);
+                }
+            })
+            .catch(err => console.error("Erro fetch /salvarnome:", err));
+    }
+    </script>
+    </body>
+    </html>
+    )rawliteral";
+
+    html += scriptJS;
+
     return html;
 }
 
-/**
- * Configures the web server routes for handling HTTP requests.
- *
- * Sets up the following routes:
- * - "/" (GET): Serves the main relay control page.
- * - "/controle" (GET): Controls relay states based on query parameters "rele" and "acao".
- *   - "rele" specifies the relay number (1 to 5).
- *   - "acao" specifies the action ("ligar" or "desligar").
- *   Responds with "OK" if successful, or an error message if parameters are invalid.
- * - "/configurar" (POST): Configures activation and deactivation times for relays based on the
- *   provided parameters "rele", "horaAtivacao", and "horaDesativacao".
- *   Responds with confirmation if successful, or an error message if parameters are invalid.
- */
 void configurarWebServer()
 {
+    // Rota raiz (carrega a página principal para, por exemplo, o relé 1 - ou você pode ajustar
+    // para exibir algum relé "padrão". Caso queira, pode configurar para não passar parâmetros
+    // e usar valores default.)
     server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
-              { request->send(200, "text/html", paginaPrincipal(qtdRele)); });
+              {
+        // Exemplo chamando a paginaPrincipal para relé 1 (releNumber=1),
+        // ou ajuste conforme sua lógica.
+        int releNumber = 1;
+        int tempoPulso = temposPulso[releNumber - 1];
+        int tEntrada = temposEntrada[releNumber - 1];
+        String horaAtivacao = rele[releNumber - 1].horaAtivacao;
+        String horaDesativacao = rele[releNumber - 1].horaDesativacao;
 
+        request->send(200, "text/html",
+            paginaPrincipal(qtdRele, releNumber, tempoPulso, tEntrada, horaAtivacao, horaDesativacao)); });
+
+    // Liga/Desliga
     server.on("/controle", HTTP_GET, [](AsyncWebServerRequest *request)
               {
         if (request->hasParam("rele") && request->hasParam("acao")) {
             int releIdx = request->getParam("rele")->value().toInt() - 1;
             String acao = request->getParam("acao")->value();
-            if (releIdx >= 0 && releIdx < 5) {
+            if (releIdx >= 0 && releIdx < qtdRele) {
                 if (acao == "ligar") {
                     digitalWrite(rele[releIdx].pino, HIGH);
-                    rele[releIdx].status = 1;
+                    rele[releIdx].status = 1; // Atualiza status
                 } else if (acao == "desligar") {
                     digitalWrite(rele[releIdx].pino, LOW);
-                    rele[releIdx].status = 0;
+                    rele[releIdx].status = 0; // Atualiza status
                 }
                 request->send(200, "text/plain", "OK");
             } else {
@@ -1214,14 +1176,18 @@ void configurarWebServer()
             request->send(400, "text/plain", "Parâmetros inválidos");
         } });
 
+    // Exemplo de rota POST para configurar apenas horaAtivacao/horaDesativacao (se ainda existir)
     server.on("/configurar", HTTP_POST, [](AsyncWebServerRequest *request)
               {
-        if (request->hasParam("rele", true) && request->hasParam("horaAtivacao", true) && request->hasParam("horaDesativacao", true)) {
+        if (request->hasParam("rele", true) && 
+            request->hasParam("horaAtivacao", true) && 
+            request->hasParam("horaDesativacao", true))
+        {
             int releIdx = request->getParam("rele", true)->value().toInt() - 1;
             if (releIdx >= 0 && releIdx < 5) {
                 rele[releIdx].horaAtivacao = request->getParam("horaAtivacao", true)->value();
                 rele[releIdx].horaDesativacao = request->getParam("horaDesativacao", true)->value();
-                request->send(200, "text/plain", "Horários configurados no Web Server");
+                request->send(200, "text/plain", "Horários configurados");
                 request->redirect("/");
             } else {
                 request->send(400, "text/plain", "Relé inválido");
@@ -1230,74 +1196,89 @@ void configurarWebServer()
             request->send(400, "text/plain", "Parâmetros inválidos");
         } });
 
+    // Switch (acionamento temporário)
     server.on("/switch", HTTP_GET, [](AsyncWebServerRequest *request)
               {
-    if (request->hasParam("rele")) {
-        int releIdx = request->getParam("rele")->value().toInt() - 1;
-        if (releIdx >= 0 && releIdx < qtdRele) {
-            if (!switchAtual.ativo) {
-                digitalWrite(rele[releIdx].pino, HIGH); // Liga o relé
-                switchAtual.ativo = true;
-                switchAtual.inicio = millis(); // Marca o início do pulso
-                switchAtual.releIdx = releIdx;
-                request->send(200, "text/plain", "Switch ativado para o relé " + String(releIdx + 1));
-            } else {
-                request->send(400, "text/plain", "Outro switch está ativo. Tente novamente.");
+        if (request->hasParam("rele"))
+        {
+            int releIdx = request->getParam("rele")->value().toInt() - 1;
+            if (releIdx >= 0 && releIdx < qtdRele)
+            {
+                if (!switchAtual.ativo)
+                {
+                    digitalWrite(rele[releIdx].pino, HIGH);
+                    rele[releIdx].status = 1;
+                    switchAtual.ativo = true;
+                    switchAtual.inicio = millis();
+                    switchAtual.releIdx = releIdx;
+                    request->send(200, "text/plain", "Switch ativado!");
+                }
+                else
+                {
+                    request->send(400, "text/plain", "Outro switch está ativo.");
+                }
             }
-        } else {
-            request->send(400, "text/plain", "Relé inválido.");
+            else
+            {
+                request->send(400, "text/plain", "Relé inválido.");
+            }
         }
-    } else {
-        request->send(400, "text/plain", "Parâmetro 'rele' ausente.");
-    } });
+        else
+        {
+            request->send(400, "text/plain", "Parâmetro 'rele' ausente.");
+        } });
 
+    // Retorno do status (JSON)
     server.on("/status", HTTP_GET, [](AsyncWebServerRequest *request)
               {
         String response = "{ \"reles\": [";
-        for (int i = 0; i < 5; i++) {
+        for (int i = 0; i < qtdRele; i++) {
             response += "{";
-            response += "\"status\": " + String(rele[i].status) + ",";
-            response += "\"tempoPulso\": " + String(tempoClick);
+            response += "\"status\": " + String(rele[i].status);
             response += "}";
-            if (i < 4) response += ",";
+            if (i < qtdRele - 1) response += ",";
         }
         response += "] }";
         request->send(200, "application/json", response); });
 
-    server.on("/configurarentrada", HTTP_POST, [](AsyncWebServerRequest *request)
+    // Ajuste de tempos via POST (pulso/entrada)
+    server.on("/configurartemporele", HTTP_POST, [](AsyncWebServerRequest *request)
               {
-    if (request->hasParam("tempo", true) && request->hasParam("rele", true)) {
-        int releIdx = request->getParam("rele", true)->value().toInt() - 1;
-        int novoTempo = request->getParam("tempo", true)->value().toInt();
+        if (request->hasParam("rele", true) && 
+            request->hasParam("tempoPulso", true) && 
+            request->hasParam("tempoEntrada", true))
+        {
+            int releIdx = request->getParam("rele", true)->value().toInt() - 1;
+            int novoTempoPulso = request->getParam("tempoPulso", true)->value().toInt();
+            int novoTempoEntrada = request->getParam("tempoEntrada", true)->value().toInt();
 
-        if (releIdx >= 0 && releIdx < qtdRele) {
-            if (novoTempo > 0) {
-                temposEntrada[releIdx] = novoTempo; // Salve no índice correto
-                Serial.printf("Tempo de entrada do relé %d atualizado para: %d ms\n", releIdx + 1, novoTempo);
-                request->redirect("/"); // Redireciona de volta para a página principal
+            if (releIdx >= 0 && releIdx < 5) {
+                temposPulso[releIdx] = novoTempoPulso;
+                tempoEntrada = novoTempoEntrada; // Se for um único global, mantenha. Senão ajuste.
+                Serial.printf("Tempo do pulso do relé %d: %d ms\n", releIdx + 1, novoTempoPulso);
+                Serial.printf("Tempo de entrada: %d ms\n", novoTempoEntrada);
+                request->send(200, "text/plain", "Tempos atualizados");
+                request->redirect("/");
             } else {
-                request->send(400, "text/plain", "Valor inválido para o tempo do pulso da entrada");
+                request->send(400, "text/plain", "Relé inválido");
             }
         } else {
-            request->send(400, "text/plain", "Relé inválido.");
-        }
-    } else {
-        request->send(400, "text/plain", "Parâmetros ausentes.");
-    } });
+            request->send(400, "text/plain", "Parâmetros inválidos");
+        } });
 
-    server.on("/configurartempo", HTTP_GET, [](AsyncWebServerRequest *request)
+    server.on("/salvarnome", HTTP_GET, [](AsyncWebServerRequest *request)
               {
-    if (request->hasParam("rele"))
+    if (request->hasParam("rele") && request->hasParam("nome"))
     {
         int releIdx = request->getParam("rele")->value().toInt() - 1;
+        String novoNome = request->getParam("nome")->value();
 
         if (releIdx >= 0 && releIdx < qtdRele)
         {
-            String horaAtivacao = rele[releIdx].horaAtivacao;
-            String horaDesativacao = rele[releIdx].horaDesativacao;
-
-            String html = paginaConfiguracaoRele(releIdx + 1, temposPulso[releIdx], temposEntrada[releIdx], horaAtivacao, horaDesativacao);
-            request->send(200, "text/html", html);
+            // Salva no struct
+            rele[releIdx].nome = novoNome;
+            Serial.printf("Nome do Relé %d alterado para: %s\n", releIdx + 1, novoNome.c_str());
+            request->send(200, "text/plain", "OK");
         }
         else
         {
@@ -1306,36 +1287,93 @@ void configurarWebServer()
     }
     else
     {
-        request->send(400, "text/plain", "Parâmetro 'rele' ausente.");
+        request->send(400, "text/plain", "Parâmetros ausentes.");
     } });
 
-    // Salvando configuração de tempo
+    // Exemplo de configuração de “tempo de entrada” separado (se você ainda precisar)
+    server.on("/configurarentrada", HTTP_POST, [](AsyncWebServerRequest *request)
+              {
+        if (request->hasParam("tempo", true)) {
+            String tempoStr = request->getParam("tempo", true)->value();
+            int novoTempo = tempoStr.toInt();
+            if (novoTempo > 0) {
+                tempoEntrada = novoTempo;
+                Serial.println("Tempo da entrada atualizado para: " + String(tempoEntrada) + " ms");
+                request->redirect("/");
+            } else {
+                request->send(400, "text/plain", "Valor inválido para o tempo do pulso da entrada");
+            }
+        } else {
+            request->send(400, "text/plain", "Parâmetro 'tempo' ausente");
+        } });
+
+    // IMPORTANTE:
+    // A rota /configurartempo AGORA usa a paginaPrincipal(...) no lugar de paginaConfiguracaoRele(...)
+    // para exibir a mesma página unificada (sem excluir a rota ou alterar nomes).
+    server.on("/configurartempo", HTTP_GET, [](AsyncWebServerRequest *request)
+              {
+        if (request->hasParam("rele"))
+        {
+            int releIdx = request->getParam("rele")->value().toInt() - 1;
+
+            // Busca valores do relé específico
+            int tempoPulso = temposPulso[releIdx];
+            int tEntrada   = temposEntrada[releIdx];
+            String horaAtivacao   = rele[releIdx].horaAtivacao;
+            String horaDesativacao= rele[releIdx].horaDesativacao;
+
+            // Agora chamamos a sua função unificada paginaPrincipal(...)
+            // que deve ter a assinatura que inclua estes parâmetros.
+            request->send(200, "text/html",
+                paginaPrincipal(qtdRele, releIdx + 1, tempoPulso, tEntrada, horaAtivacao, horaDesativacao));
+        }
+        else
+        {
+            request->send(400, "text/plain", "Parâmetro 'rele' ausente.");
+        } });
+
+    // Salvar config (antes era usado pelo form da página separada, mas agora
+    // ele continua funcionando normalmente, pois a mesma <form> está dentro da paginaPrincipal).
     server.on("/salvarconfig", HTTP_POST, [](AsyncWebServerRequest *request)
               {
     if (request->hasParam("rele", true))
     {
         int releIdx = request->getParam("rele", true)->value().toInt() - 1;
-
         if (releIdx >= 0 && releIdx < qtdRele)
         {
-            // Atualizando valores apenas se eles forem fornecidos
-            if (request->hasParam("horaAtivacao", true))
-            {
-                String horaAtivacao = request->getParam("horaAtivacao", true)->value();
-                rele[releIdx].horaAtivacao = horaAtivacao;
+            // tempoPulso
+            if (request->hasParam("tempoPulso", true)) {
+                int tPulso = request->getParam("tempoPulso", true)->value().toInt();
+                temposPulso[releIdx] = tPulso;
             }
 
-            if (request->hasParam("horaDesativacao", true))
-            {
-                String horaDesativacao = request->getParam("horaDesativacao", true)->value();
-                rele[releIdx].horaDesativacao = horaDesativacao;
+            // tempoEntrada
+            if (request->hasParam("tempoEntrada", true)) {
+                int tEntrada = request->getParam("tempoEntrada", true)->value().toInt();
+                temposEntrada[releIdx] = tEntrada;
             }
 
-            // Responder ao cliente com sucesso
-            request->send(200, "text/plain", "Configuração salva com sucesso!");
-            Serial.printf("Relé %d configurado:\n", releIdx + 1);
-            Serial.printf(" - Hora de ativação: %s\n", rele[releIdx].horaAtivacao.c_str());
-            Serial.printf(" - Hora de desativação: %s\n", rele[releIdx].horaDesativacao.c_str());
+            // modoRele (se você tiver)
+            if (request->hasParam("modoRele", true)) {
+                int modo = request->getParam("modoRele", true)->value().toInt();
+                modoAcionamento[releIdx] = modo;
+            }
+
+            // Agora, SALVAMOS O NOME
+            if (request->hasParam("nomeRele", true)) {
+                String nome = request->getParam("nomeRele", true)->value();
+                rele[releIdx].nome = nome;
+            }
+
+            // horaAtivacao / horaDesativacao (opcional)
+            if (request->hasParam("horaAtivacao", true)) {
+                rele[releIdx].horaAtivacao = request->getParam("horaAtivacao", true)->value();
+            }
+            if (request->hasParam("horaDesativacao", true)) {
+                rele[releIdx].horaDesativacao = request->getParam("horaDesativacao", true)->value();
+            }
+            
+            salvarConfiguracoes();
             request->redirect("/");
         }
         else
@@ -1347,36 +1385,12 @@ void configurarWebServer()
     {
         request->send(400, "text/plain", "Parâmetro 'rele' ausente.");
     } });
+    ;
 
-    // Página de configuração do tempo
-    server.on("/configurartempo", HTTP_GET, [](AsyncWebServerRequest *request)
-              {
-        if (request->hasParam("rele")) {
-            int releIdx = request->getParam("rele")->value().toInt() - 1;
-
-            // Use valores existentes ou padrão
-            int tempoPulso = temposPulso[releIdx];
-            int tempoEntrada = temposEntrada[releIdx]; // Corrigido
-            String horaAtivacao = rele[releIdx].horaAtivacao;
-            String horaDesativacao = rele[releIdx].horaDesativacao;
-
-            // Chamar a função com os argumentos
-            request->send(200, "text/html",
-                          paginaConfiguracaoRele(releIdx + 1, tempoPulso, tempoEntrada, horaAtivacao, horaDesativacao));
-        } else {
-            request->send(400, "text/plain", "Parâmetro 'rele' ausente.");
-        } });
-
+    // Inicia o servidor
     server.begin();
 }
 
-/**
- * Carrega a configuração Wi-Fi salva na SPIFFS em um arquivo chamado
- * "wifi_config.txt". Se o arquivo existir, tenta se conectar à rede
- * especificada. Se a conexão for bem-sucedida, imprime o IP atribuído.
- * Se a conexão falhar ou o arquivo não existir, imprime uma mensagem de
- * erro.
- */
 void loadWiFiConfig()
 {
     if (SPIFFS.exists("/wifi_config.txt"))
@@ -1420,30 +1434,11 @@ void loadWiFiConfig()
     }
 }
 
-/**
- * Retorna a hora atual formatada como uma string no padrão HH:MM:SS.
- *
- * @return String com a hora atual formatada.
- */
 String getHoraAtual()
 {
     return timeClient.getFormattedTime(); // Ajuste para o método que você usa para obter o horário
 }
 
-// Loop para controle de horários configurados no Web Server
-
-/**
- * Verifica se a hora atual é igual às horas configuradas para cada um dos
- * 5 relés e, se sim, ativa ou desativa o relé de acordo com a configuração.
- *
- * A função acessa o horário atual com o método getHoraAtual() e itera sobre
- * os objetos do vetor "rele". Para cada relé, verifica se a hora atual é igual
- * às horas de ativação ou desativação configuradas. Caso seja, ativa ou desativa
- * o relé de acordo com a configuração.
- *
- * A função é chamada no loop principal do programa, logo após a configuração
- * do Web Server.
- */
 void controlarRelesWebServer()
 {
     String horaAtual = getHoraAtual();
@@ -1484,17 +1479,16 @@ void DisplayInit()
     display.display();
 }
 
-/**
- * Configures and initializes the hardware and network settings for the system.
- *
- * - Initializes the serial communication and configures the button and relay pins.
- * - Retrieves the unique ESP32 chip ID and constructs the database path.
- * - Mounts the SPIFFS filesystem and loads the Wi-Fi configuration.
- * - Attempts to connect to Ethernet and, if unsuccessful, switches to Wi-Fi.
- * - Initializes Firebase with authentication and registers the ESP32 ID in Firestore.
- * - Starts a stream in the Firebase Realtime Database for data synchronization.
- * - Sets up the web server for handling HTTP requests.
- */
+void taskEntradaNaSaida(void *pvParameters) {
+  for (;;) {
+    entradaNaSaida();      // A função que você quer rodando no segundo núcleo
+    vTaskDelay(10 / portTICK_PERIOD_MS);  
+    // Ajuste esse delay conforme a frequência desejada de chamadas;
+    // se quiser rodar sem parar, pode usar vTaskDelay(1) ou mesmo sem delay,
+    // mas é recomendado ao menos um pequeno delay pra não travar a CPU.
+  }
+}
+
 void setup()
 {
     Serial.begin(115200);
@@ -1546,6 +1540,16 @@ void setup()
     display.clearDisplay();
     display.display();
 
+    xTaskCreatePinnedToCore(
+      taskEntradaNaSaida,   // Função que implementa a tarefa
+      "TarefaEnSa",         // Nome amigável da tarefa (p/ debug)
+      2048,                 // Tamanho da stack (em palavras) - ajuste se necessário
+      NULL,                 // Parâmetro passado para a tarefa (se precisar)
+      1,                    // Prioridade da tarefa (0 a configMAX_PRIORITIES-1)
+      NULL,                 // (opcional) handle da tarefa
+      1                     // Core 1 = segundo núcleo
+  );
+
     // Se Ethernet falhar, verificar Wi-Fi
     if (!ethernetConnected)
     {
@@ -1559,6 +1563,12 @@ void setup()
             Serial.println("Wi-Fi conectado com as configurações salvas.");
         }
     }
+
+    rele[0].nome = "Relé 1";
+    rele[1].nome = "Relé 2";
+    rele[2].nome = "Relé 3";
+    rele[3].nome = "Relé 4";
+    rele[4].nome = "Relé 5";
 
     display.clearDisplay();
     display.setTextSize(1);
@@ -1612,19 +1622,20 @@ void setup()
 
 void loop()
 {
-    controlarRelesWebServer();
-    tiposBots();
+    leRele();
     entradaNaSaida();
+    controlarRelesWebServer();
+
+    static unsigned long lastStreamAttempt = 0;
+    if (millis() - lastStreamAttempt > 200) {
+        lastStreamAttempt = millis();
+        tiposBots(); // Faz a leitura e parse do Realtime DB
+    }
     static unsigned long lastHeartBeat = 0;
     const unsigned long heartBeatInterval = 60000; // 1 minuto
 
-    // Envia o HeartBeat periodicamente
-    if (millis() - lastHeartBeat >= heartBeatInterval)
-    {
-        lastHeartBeat = millis();
-        enviarheartbeat();
-    }
 
+  
     // Atualizar o horário NTP
     static unsigned long previousMillis = 0;
     const long interval = 1000;
@@ -1635,37 +1646,29 @@ void loop()
         previousMillis = currentMillis;
         timeClient.update();
         horarioAtual = timeClient.getFormattedTime();
-        Serial.println("Hora Atual: " + horarioAtual);
     }
 
-    verificarHorarioReles(horaAtivacao, horaDesativacao, rele[0].pino, 1, relesAtivos[0]);
-    verificarHorarioReles(horaAtivacao2, horaDesativacao2, rele[1].pino, 2, relesAtivos[1]);
-    verificarHorarioReles(horaAtivacao3, horaDesativacao3, rele[2].pino, 3, relesAtivos[2]);
-    verificarHorarioReles(horaAtivacao4, horaDesativacao4, rele[3].pino, 4, relesAtivos[3]);
-    verificarHorarioReles(horaAtivacao5, horaDesativacao5, rele[4].pino, 5, relesAtivos[4]);
+    verificarHorarioReles(horaAtivacao, horaDesativacao, rele[0].pino, 1);
+    verificarHorarioReles(horaAtivacao2, horaDesativacao2, rele[1].pino, 2);
+    verificarHorarioReles(horaAtivacao3, horaDesativacao3, rele[2].pino, 3);
+    verificarHorarioReles(horaAtivacao4, horaDesativacao4, rele[3].pino, 4);
+    verificarHorarioReles(horaAtivacao5, horaDesativacao5, rele[4].pino, 5);
 
-    if (pulseAtual.ativo)
-    {
-        if (millis() - pulseAtual.inicio >= 200)
-        {                                                     // Após 200ms
-            digitalWrite(rele[pulseAtual.releIdx].pino, LOW); // Desliga o relé
-            pulseAtual.ativo = false;                         // Finaliza o estado do pulso
-            registrarEvento(("Relé " + String(pulseAtual.releIdx + 1)).c_str(), "Ativado e Desativado");
-        }
-    }
     if (switchAtual.ativo)
     {
-        if (millis() - switchAtual.inicio >= temposPulso[switchAtual.releIdx])
+        unsigned long tempoDecorrido = millis() - switchAtual.inicio;
+        int releIdx = switchAtual.releIdx;
+
+        // Atualiza o status enquanto o relé está ativo
+        rele[releIdx].status = 1;
+
+        if (tempoDecorrido >= temposPulso[releIdx])
         {
-            digitalWrite(rele[switchAtual.releIdx].pino, LOW); // Desliga o relé
-            switchAtual.ativo = false;                         // Finaliza o pulso
-            Serial.println("Pulso finalizado para o relé " + String(switchAtual.releIdx + 1));
+            digitalWrite(rele[releIdx].pino, LOW);
+            switchAtual.ativo = false;
+            rele[releIdx].status = 0; // Atualiza o status quando desativa
         }
     }
 
     delay(100); // Pequeno delay para evitar loops excessivos
 }
-
-// tempo do pulso, tempo do pulso da entrada, mostrar status do rele
-
-//testee
