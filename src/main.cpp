@@ -127,78 +127,6 @@ void leRele()
     }
 }
 
-// void entradaNaSaida()
-// {
-//     bool algumON = false; // Indica se algum relé foi ativado
-//     leRele();             // Atualiza os estados dos botões
-//     for (int i = 0; i < qtdRele; i++)
-//     {
-//         if (leitura[i] == 1)
-//         {
-//             digitalWrite(rele[i].pino, HIGH); // Ativa o relé correspondente
-//             Serial.printf("Relé %d ativado por %d ms\n", i + 1, temposEntrada[i]);
-//             delay(temposEntrada[i]);         // Aguarda o tempo configurado
-//             digitalWrite(rele[i].pino, LOW); // Desativa o relé após o tempo
-//             algumON = true;                  // Marca que houve um relé ativado
-//         }
-//     }
-//     if (algumON == 1)
-//     {
-//         //*************************** */
-//         // display.clearDisplay();
-//         // display.fillScreen(WHITE);
-//         // display.display();
-//         //*************************** */
-//         // delay(tempoEntrada);
-//     }
-//     else
-//     {
-//         //*************************** */
-//         // display.clearDisplay();
-//         // display.fillScreen(BLACK);
-//         // display.display();
-//         //*************************** */
-//         // }
-//         for (int i = 0; i < qtdRele; i++)
-//         {
-//             if (leitura[i] == 1)
-//             {
-//                 digitalWrite(rele[i].pino, LOW);
-//             }
-//         }
-//         for (int i = 0; i < qtdRele; i++)
-//         {
-//             if (leitura[i] == 1)
-//             {
-//                 if (i == 0)
-//                 {
-//                     rele1++;
-//                     salvarDados("/rele1.txt", rele1);
-//                 }
-//                 if (i == 1)
-//                 {
-//                     rele2++;
-//                     salvarDados("/rele2.txt", rele2);
-//                 }
-//                 if (i == 2)
-//                 {
-//                     rele3++;
-//                     salvarDados("/rele3.txt", rele3);
-//                 }
-//                 if (i == 3)
-//                 {
-//                     rele4++;
-//                     salvarDados("/rele4.txt", rele4);
-//                 }
-//                 if (i == 4)
-//                 {
-//                     rele5++;
-//                     salvarDados("/rele5.txt", rele5);
-//                 }
-//             }
-//         }
-//     }
-// }
 void entradaNaSaida()
 {
     leRele(); // Atualiza os estados dos botões, etc.
@@ -483,7 +411,6 @@ void tiposBots()
             Serial.println("Stream desconectado. Tentando reiniciar...");
             reiniciarStream();
         }
-        return; // Aguarde a próxima iteração do loop para evitar processamento excessivo
     }
 
     if (!firebaseData.streamAvailable())
@@ -1552,6 +1479,16 @@ void DisplayInit()
     display.display();
 }
 
+void taskEntradaNaSaida(void *pvParameters) {
+  for (;;) {
+    entradaNaSaida();      // A função que você quer rodando no segundo núcleo
+    vTaskDelay(10 / portTICK_PERIOD_MS);  
+    // Ajuste esse delay conforme a frequência desejada de chamadas;
+    // se quiser rodar sem parar, pode usar vTaskDelay(1) ou mesmo sem delay,
+    // mas é recomendado ao menos um pequeno delay pra não travar a CPU.
+  }
+}
+
 void setup()
 {
     Serial.begin(115200);
@@ -1602,6 +1539,16 @@ void setup()
     }
     display.clearDisplay();
     display.display();
+
+    xTaskCreatePinnedToCore(
+      taskEntradaNaSaida,   // Função que implementa a tarefa
+      "TarefaEnSa",         // Nome amigável da tarefa (p/ debug)
+      2048,                 // Tamanho da stack (em palavras) - ajuste se necessário
+      NULL,                 // Parâmetro passado para a tarefa (se precisar)
+      1,                    // Prioridade da tarefa (0 a configMAX_PRIORITIES-1)
+      NULL,                 // (opcional) handle da tarefa
+      1                     // Core 1 = segundo núcleo
+  );
 
     // Se Ethernet falhar, verificar Wi-Fi
     if (!ethernetConnected)
@@ -1678,17 +1625,17 @@ void loop()
     leRele();
     entradaNaSaida();
     controlarRelesWebServer();
-    tiposBots();
+
+    static unsigned long lastStreamAttempt = 0;
+    if (millis() - lastStreamAttempt > 200) {
+        lastStreamAttempt = millis();
+        tiposBots(); // Faz a leitura e parse do Realtime DB
+    }
     static unsigned long lastHeartBeat = 0;
     const unsigned long heartBeatInterval = 60000; // 1 minuto
 
-    // Envia o HeartBeat periodicamente
-    if (millis() - lastHeartBeat >= heartBeatInterval)
-    {
-        lastHeartBeat = millis();
-        enviarheartbeat();
-    }
 
+  
     // Atualizar o horário NTP
     static unsigned long previousMillis = 0;
     const long interval = 1000;
