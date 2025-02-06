@@ -297,12 +297,14 @@ void enviarheartbeat()
     }
 }
 
-void salvarConfiguracoes() {
+void salvarConfiguracoes()
+{
     // Cria um documento JSON e preenche com os valores atuais
-    StaticJsonDocument<512> doc; 
+    StaticJsonDocument<512> doc;
 
     JsonArray arr = doc.createNestedArray("reles");
-    for (int i = 0; i < qtdRele; i++) {
+    for (int i = 0; i < qtdRele; i++)
+    {
         JsonObject obj = arr.createNestedObject();
         obj["tempoPulso"] = temposPulso[i];
         obj["tempoEntrada"] = temposEntrada[i];
@@ -313,29 +315,36 @@ void salvarConfiguracoes() {
 
     // Abre/cria o arquivo e escreve
     File file = SPIFFS.open("/configRele.json", FILE_WRITE);
-    if (file) {
+    if (file)
+    {
         serializeJson(doc, file);
         file.close();
         Serial.println("Configurações salvas em /configRele.json");
-    } else {
+    }
+    else
+    {
         Serial.println("Falha ao abrir /configRele.json para escrita");
     }
 }
 
-void carregarConfiguracoes() {
-    if(!SPIFFS.exists("/configRele.json")) {
+void carregarConfiguracoes()
+{
+    if (!SPIFFS.exists("/configRele.json"))
+    {
         Serial.println("Nenhum arquivo /configRele.json encontrado, usando valores padrão.");
         return;
     }
     File file = SPIFFS.open("/configRele.json", FILE_READ);
-    if (!file) {
+    if (!file)
+    {
         Serial.println("Falha ao abrir /configRele.json para leitura");
         return;
     }
 
     StaticJsonDocument<512> doc;
     DeserializationError error = deserializeJson(doc, file);
-    if (error) {
+    if (error)
+    {
         Serial.println("Erro ao fazer parse do JSON de config: ");
         Serial.println(error.f_str());
         file.close();
@@ -344,8 +353,10 @@ void carregarConfiguracoes() {
 
     file.close();
     JsonArray arr = doc["reles"];
-    if (!arr.isNull()) {
-        for (int i = 0; i < arr.size() && i < qtdRele; i++) {
+    if (!arr.isNull())
+    {
+        for (int i = 0; i < arr.size() && i < qtdRele; i++)
+        {
             JsonObject obj = arr[i];
             temposPulso[i] = obj["tempoPulso"] | 200;
             temposEntrada[i] = obj["tempoEntrada"] | 200;
@@ -375,9 +386,10 @@ void atualizarEstadoRele(int pino, int estado, int numRele)
 
 void reiniciarStream()
 {
-    Firebase.RTDB.endStream(&firebaseData); // Finaliza qualquer stream ativo
+    // Finaliza qualquer stream ativo
+    Firebase.RTDB.endStream(&firebaseData);
 
-    // Reconfigura e tenta reiniciar o stream
+    // Tenta iniciar novamente
     if (!Firebase.RTDB.beginStream(&firebaseData, databasePath.c_str()))
     {
         Serial.println("Falha ao reiniciar o stream: " + firebaseData.errorReason());
@@ -386,36 +398,37 @@ void reiniciarStream()
     {
         Serial.println("Stream reiniciado com sucesso.");
     }
-    streamReiniciado = true; // Sucesso no reinício
-                             /*************  ✨ Codeium Command ⭐  *************/
-                             /**
-                              * Função que lida com a leitura de dados recebidos via Stream do Firebase.
-                              *
-                              * Verifica se o stream está disponível e, se sim, extrai o valor do campo 'atualizado' recebido.
-                              * Em seguida, verifica se o caminho recebido é igual a "/keeplive" e, se sim, imprime o horário atualizado recebido.
-                              *
-                              * Além disso, verifica se o caminho recebido é igual a "/releX" (onde X é o número do relé) e, se sim, extrai o valor do campo 'status' recebido e atualiza o estado do relé correspondente.
-                              *
-                              * Por fim, verifica se o caminho recebido é igual a "/releX" e o valor do campo 'horaAtivacao' ou 'horaDesativacao' foi alterado, e, se sim, atualiza o horário de ativação ou desativação do relé correspondente.
-                              *
-                              * @return Nenhum valor de retorno.
-                              */
-/******  dbfb5ebf-b8f3-4b89-a324-2a6862f6bd15  *******/}
+
+    // Se não usar a flag 'streamReiniciado' para nada, pode remover completamente.
+    // Caso ainda deseje marcar que "ainda não recebemos nada após a reconexão", use:
+    // streamReiniciado = true;
+}
 
 void tiposBots()
 {
-    if (!Firebase.RTDB.readStream(&firebaseData))
+    bool ok = Firebase.RTDB.readStream(&firebaseData);
+
+    // 2) Se falhou e há um httpCode != 0, é erro real de conexão
+    if (!ok)
     {
-        if (!streamReiniciado)
-        { // Só tenta reiniciar se ainda não foi reiniciado
-            Serial.println("Stream desconectado. Tentando reiniciar...");
+        // Se httpCode != 0, pode ser erro
+        int code = firebaseData.httpCode();
+        if (code != 0)
+        {
+            // Se for -1000, 401, 404 etc., trate como desconexão
+            Serial.printf("Stream caiu: httpCode=%d reason=%s\n", code, firebaseData.errorReason().c_str());
             reiniciarStream();
         }
     }
 
+    // 3) Se não chegou nada novo => apenas retorna
     if (!firebaseData.streamAvailable())
+    {
+        // Não há alterações, nada a processar
         return;
-    streamReiniciado = false;
+    }
+
+    // Se chegou aqui, significa que temos dados novos no stream
     String jsonData = firebaseData.to<String>();
     String dataPath = firebaseData.dataPath();
     Serial.println("Dados recebidos: " + jsonData);
@@ -1479,14 +1492,59 @@ void DisplayInit()
     display.display();
 }
 
-void taskEntradaNaSaida(void *pvParameters) {
-  for (;;) {
-    entradaNaSaida();      // A função que você quer rodando no segundo núcleo
-    vTaskDelay(10 / portTICK_PERIOD_MS);  
-    // Ajuste esse delay conforme a frequência desejada de chamadas;
-    // se quiser rodar sem parar, pode usar vTaskDelay(1) ou mesmo sem delay,
-    // mas é recomendado ao menos um pequeno delay pra não travar a CPU.
-  }
+void taskEntradaNaSaida(void *pvParameters)
+{
+    for (;;)
+    {
+        entradaNaSaida(); // A função que você quer rodando no segundo núcleo
+        vTaskDelay(10 / portTICK_PERIOD_MS);
+        // Ajuste esse delay conforme a frequência desejada de chamadas;
+        // se quiser rodar sem parar, pode usar vTaskDelay(1) ou mesmo sem delay,
+        // mas é recomendado ao menos um pequeno delay pra não travar a CPU.
+    }
+}
+
+void verificarToken()
+{
+    if (Firebase.ready())
+    {
+        if (config.signer.tokens.status == token_status_error)
+        {
+            Serial.println("Renovando token...");
+            Firebase.refreshToken(&config); // Renovar token manualmente
+        }
+    }
+    else
+    {
+        Serial.println("Firebase não está pronto. Verificando conexão...");
+    }
+}
+
+void enviarHeartbeat()
+{
+    static unsigned long lastHeartbeat = 0;
+    unsigned long intervalo = 60000; // 1 minuto
+
+    if (millis() - lastHeartbeat > intervalo)
+    {
+        FirebaseJson json;
+        json.set("espId", espUniqueId);  // Identificação do dispositivo
+        json.set("timestamp", millis()); // Tempo de execução desde o início
+        json.set("status", "ativo");     // Informação de status
+
+        String path = "/heartbeat/" + String(espUniqueId);
+
+        if (Firebase.RTDB.setJSON(&firebaseData, path.c_str(), &json))
+        {
+            Serial.println("Heartbeat enviado com sucesso.");
+        }
+        else
+        {
+            Serial.printf("Erro ao enviar heartbeat: %s\n", firebaseData.errorReason().c_str());
+        }
+
+        lastHeartbeat = millis();
+    }
 }
 
 void setup()
@@ -1541,14 +1599,14 @@ void setup()
     display.display();
 
     xTaskCreatePinnedToCore(
-      taskEntradaNaSaida,   // Função que implementa a tarefa
-      "TarefaEnSa",         // Nome amigável da tarefa (p/ debug)
-      2048,                 // Tamanho da stack (em palavras) - ajuste se necessário
-      NULL,                 // Parâmetro passado para a tarefa (se precisar)
-      1,                    // Prioridade da tarefa (0 a configMAX_PRIORITIES-1)
-      NULL,                 // (opcional) handle da tarefa
-      1                     // Core 1 = segundo núcleo
-  );
+        taskEntradaNaSaida, // Função que implementa a tarefa
+        "TarefaEnSa",       // Nome amigável da tarefa (p/ debug)
+        2048,               // Tamanho da stack (em palavras) - ajuste se necessário
+        NULL,               // Parâmetro passado para a tarefa (se precisar)
+        1,                  // Prioridade da tarefa (0 a configMAX_PRIORITIES-1)
+        NULL,               // (opcional) handle da tarefa
+        1                   // Core 1 = segundo núcleo
+    );
 
     // Se Ethernet falhar, verificar Wi-Fi
     if (!ethernetConnected)
@@ -1585,6 +1643,9 @@ void setup()
     auth.user.email = EMAIL;
     auth.user.password = EMAIL_PASSWORD;
     config.token_status_callback = tokenStatusCallback;
+
+    WiFi.mode(WIFI_AP_STA);
+    WiFi.softAP("MeuAP", "12345678");
 
     Firebase.begin(&config, &auth);
     Firebase.reconnectWiFi(true);
@@ -1625,17 +1686,20 @@ void loop()
     leRele();
     entradaNaSaida();
     controlarRelesWebServer();
-
+    
     static unsigned long lastStreamAttempt = 0;
-    if (millis() - lastStreamAttempt > 200) {
+    if (millis() - lastStreamAttempt > 200)
+    {
         lastStreamAttempt = millis();
         tiposBots(); // Faz a leitura e parse do Realtime DB
     }
-    static unsigned long lastHeartBeat = 0;
-    const unsigned long heartBeatInterval = 60000; // 1 minuto
 
+    static unsigned long lastHeartbeat = 0;
+    unsigned long now = millis();
 
-  
+         enviarHeartbeat();
+    
+
     // Atualizar o horário NTP
     static unsigned long previousMillis = 0;
     const long interval = 1000;
@@ -1643,9 +1707,16 @@ void loop()
 
     if (currentMillis - previousMillis >= interval)
     {
-        previousMillis = currentMillis;
-        timeClient.update();
-        horarioAtual = timeClient.getFormattedTime();
+        if (WiFi.status() == WL_CONNECTED)
+        {
+            timeClient.update(); // só tenta se tiver Wi-Fi
+            previousMillis = currentMillis;
+            horarioAtual = timeClient.getFormattedTime();
+        }
+        else
+        {
+            // pula a atualização ou faz algo offline
+        }
     }
 
     verificarHorarioReles(horaAtivacao, horaDesativacao, rele[0].pino, 1);
@@ -1670,8 +1741,9 @@ void loop()
         }
     }
 
+    verificarToken();
+
     delay(100); // Pequeno delay para evitar loops excessivos
 }
 
-//teste
-
+// teste
