@@ -3,10 +3,14 @@
 #include <DNSServer.h>
 #include <WiFi.h>
 #include <Adafruit_GFX.h>
-#include <Adafruit_SSD1306.h>
+#include <Adafruit_SH1106.h>
 #include <ArduinoJson.h>
+#include <Wire.h>
 
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
+#define SDA_PIN 4 // Alterar se estiver usando outros pinos
+#define SCL_PIN 22
+
+Adafruit_SH1106 display(-1);
 
 DNSServer dnsServer;
 const byte DNS_PORT = 53;
@@ -64,7 +68,7 @@ String getTokenStatus(TokenInfo info)
         return "unknown";
     }
 }
-
+int teste = 0;
 void tokenStatusCallback(TokenInfo info)
 {
     Serial.printf("Token Info: type = %s, status = %s\n",
@@ -73,6 +77,11 @@ void tokenStatusCallback(TokenInfo info)
     if (info.status == token_status_error)
     {
         Serial.printf("Token error: %s\n", info.error.message.c_str());
+        teste++;
+        if (teste == 20)
+        {
+            ESP.restart();
+        }
     }
 }
 
@@ -1474,14 +1483,6 @@ void controlarRelesWebServer()
 
 void DisplayInit()
 {
-
-    if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C))
-    { // Address 0x3D for 128x64
-        Serial.println(F("SSD1306 allocation failed"));
-        for (;;)
-            ;
-    }
-    delay(2000);
     display.clearDisplay();
 
     display.setTextSize(1);
@@ -1552,6 +1553,7 @@ void setup()
     Serial.begin(115200);
     pinMode(BTN_CONFIG, INPUT);
     digitalWrite(25, HIGH);
+    pinMode(BTN_PIN, INPUT_PULLUP);
 
     uint64_t chipid = ESP.getEfuseMac();
     sprintf(espUniqueId, "%04X%08X", (uint16_t)(chipid >> 32), (uint32_t)chipid);
@@ -1588,13 +1590,10 @@ void setup()
         Serial.println(Ethernet.localIP());
         ethernetConnected = true;
     }
+    Wire.begin(SDA_PIN, SCL_PIN);
 
-    if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C))
-    { // Inicializar o display
-        Serial.println(F("Falha na inicialização do display SSD1306!"));
-        for (;;)
-            ; // Trava o sistema se não inicializar
-    }
+    Serial.println("Iniciando display...");
+    display.begin(SH1106_SWITCHCAPVCC, 0x3C); // Endereço padrão 0x3C
     display.clearDisplay();
     display.display();
 
@@ -1686,7 +1685,7 @@ void loop()
     leRele();
     entradaNaSaida();
     controlarRelesWebServer();
-    
+
     static unsigned long lastStreamAttempt = 0;
     if (millis() - lastStreamAttempt > 200)
     {
@@ -1697,8 +1696,7 @@ void loop()
     static unsigned long lastHeartbeat = 0;
     unsigned long now = millis();
 
-         enviarHeartbeat();
-    
+    enviarHeartbeat();
 
     // Atualizar o horário NTP
     static unsigned long previousMillis = 0;
@@ -1742,8 +1740,39 @@ void loop()
     }
 
     verificarToken();
+    int btnState = digitalRead(BTN_PIN);
+
+    if (btnState == LOW)
+    {
+        // Botão está pressionado
+        if (!buttonPressed)
+        {
+            // Acabou de apertar
+            buttonPressed = true;
+            pressStartTime = millis();
+        }
+        else
+        {
+            // Já estava pressionado antes, vamos checar se passou 5 seg
+            unsigned long pressedDuration = millis() - pressStartTime;
+            if (pressedDuration >= HOLD_TIME)
+            {
+                Serial.println("Botão pressionado por 5s. Formatando SPIFFS...");
+                SPIFFS.format(); // Apaga todos os arquivos do SPIFFS
+
+        
+                // Para evitar reformatar várias vezes seguidas
+                buttonPressed = false;
+                delay(500);
+                ESP.restart();
+            }
+        }
+    }
+    else
+    {
+        // Botão está solto
+        buttonPressed = false;
+    }
 
     delay(100); // Pequeno delay para evitar loops excessivos
 }
-
-// teste

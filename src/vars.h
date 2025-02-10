@@ -94,7 +94,11 @@ struct SwitchTask
 };
 SwitchTask switchAtual;
 
+const int BTN_PIN = 17;            // Pino em que o botão está conectado
+const unsigned long HOLD_TIME = 5000; // 5 segundos (em ms)
+
+bool buttonPressed = false;   // Para marcar se o botão está pressionado
+unsigned long pressStartTime = 0;
+
 // 22 scl
 // 21 sda
-#define SDA_PIN 21 // Escolha o pino para SDA
-#define SCL_PIN 22 // Escolha o pino para SCL
