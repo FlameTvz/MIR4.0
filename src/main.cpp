@@ -433,7 +433,6 @@ void tiposBots()
     {
         return;
     }
-
     // Se chegou aqui, significa que temos dados novos no stream
     String jsonData = firebaseData.to<String>();
     String dataPath = firebaseData.dataPath();
@@ -466,7 +465,6 @@ void tiposBots()
                 registrarEvento(("Relé " + String(i + 1)).c_str(), "Desativado");
                 atualizarEstadoRele(rele[i].pino, false, i + 1);
             }
-
             // Escutando tempoPulso no Firebase e atualizando a variável
             if (jsonData.indexOf("\"tempoPulso\":") != -1)
             {
@@ -485,7 +483,6 @@ void tiposBots()
                     Serial.printf("Tempo de pulso do Relé %d atualizado para %d ms\n", i + 1, novoTempo);
                 }
             }
-
             // Escutando tempoDebouncing no Firebase e atualizando a variável
             if (jsonData.indexOf("\"tempoDebouncing\":") != -1)
             {
@@ -504,46 +501,57 @@ void tiposBots()
                     Serial.printf("Tempo de debouncing do Relé %d atualizado para %d ms\n", i + 1, novoTempo);
                 }
             }
+            // Escutando modoAcionamento no Firebase e atualizando a variável
+            if (jsonData.indexOf("\"modoAcionamento\":") != -1)
+            {
+                int startIndex = jsonData.indexOf("\"modoAcionamento\":") + 18;
+                int endIndex = jsonData.indexOf(",", startIndex);
+                if (endIndex == -1)
+                    endIndex = jsonData.indexOf("}", startIndex);
+
+                String modoStr = jsonData.substring(startIndex, endIndex);
+                modoStr.trim();
+                int novoModo = modoStr.toInt();
+
+                if (novoModo >= 0 && novoModo <= 2)
+                {
+                    modoAcionamento[i] = novoModo;
+                    Serial.printf("Modo de acionamento do Relé %d atualizado para %d\n", i + 1, novoModo);
+                }
+            }
         }
     }
-
-    if (jsonData.indexOf("\"horaAtivacao\":") != -1 && dataPath == "/rele1")
-    {
-        horaAtivacao = processarHorarios(dataPath, jsonData, "\"horaAtivacao\":", "/rele1");
-        Serial.println("Horário de ativação capturado: " + horaAtivacao);
-    }
-    if (jsonData.indexOf("\"horaDesativacao\":") != -1 && dataPath == "/rele1")
-    {
-        horaDesativacao = processarHorarios(dataPath, jsonData, "\"horaDesativacao\":", "/rele1");
-        Serial.println("Horário de desativação capturado: " + horaDesativacao);
-    }
-
-    if (jsonData.indexOf("\"horaAtivacao\":") != -1 && dataPath == "/rele2")
-    {
-        horaAtivacao2 = processarHorarios(dataPath, jsonData, "\"horaAtivacao\":", "/rele2");
-        Serial.println("Horário de ativação capturado: " + horaAtivacao2);
-    }
-    if (jsonData.indexOf("\"horaDesativacao\":") != -1 && dataPath == "/rele2")
-    {
-        horaDesativacao2 = processarHorarios(dataPath, jsonData, "\"horaDesativacao\":", "/rele2");
-        Serial.println("Horário de desativação capturado: " + horaDesativacao2);
-    }
-
     // Mantendo a lógica original para "Switch", mas agora usando tempoPulso atualizado
     for (int i = 0; i < 5; i++)
     {
         String pathSwitch = "/rele" + String(i + 1);
         if (jsonData.indexOf("\"tipoBotao\":\"switch") != -1 && dataPath == pathSwitch)
         {
-            digitalWrite(rele[i].pino, HIGH);
-            delay(temposPulso[i]); // Usa o tempoPulso atualizado do Firebase
-            digitalWrite(rele[i].pino, LOW);
-            registrarEvento(("Relé " + String(i + 1)).c_str(), "Ativado e Desativado");
+            // Lógica de acionamento conforme o modo atualizado
+            switch (modoAcionamento[i])
+            {
+            case 0: // Manter Ligado
+                digitalWrite(rele[i].pino, HIGH);
+                registrarEvento(("Relé " + String(i + 1)).c_str(), "Ativado - Manter Ligado");
+                break;
+
+            case 1: // Pulso
+                digitalWrite(rele[i].pino, HIGH);
+                delay(temposPulso[i]);
+                digitalWrite(rele[i].pino, LOW);
+                registrarEvento(("Relé " + String(i + 1)).c_str(), "Ativado e Desativado - Pulso");
+                break;
+
+            case 2: // Desligar ao soltar
+                digitalWrite(rele[i].pino, HIGH);
+                delay(temposEntrada[i]);
+                digitalWrite(rele[i].pino, LOW);
+                registrarEvento(("Relé " + String(i + 1)).c_str(), "Ativado e Desativado - Desligar ao soltar");
+                break;
+            }
         }
     }
 }
-
-
 
 void atualizarEstadoRele2(int rele, int estado)
 {
