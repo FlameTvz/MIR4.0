@@ -420,7 +420,6 @@ void tiposBots()
     // 2) Se falhou e há um httpCode != 0, é erro real de conexão
     if (!ok)
     {
-        // Se httpCode != 0, pode ser erro
         int code = firebaseData.httpCode();
         if (code != 0)
         {
@@ -450,30 +449,48 @@ void tiposBots()
         String horarioAtualizado = jsonData.substring(startIndex, endIndex);
 
         Serial.println("Hora atualizada recebida: " + horarioAtualizado);
-        // Aqui você pode usar o valor recebido como necessário
     }
 
     for (int i = 0; i < 5; i++)
     {
         String pathRele = "/rele" + String(i + 1);
+
         if (dataPath == pathRele)
         {
             if (jsonData.indexOf("\"status\":true") != -1)
             {
                 digitalWrite(rele[i].pino, HIGH);
                 registrarEvento(("Relé " + String(i + 1)).c_str(), "Ativado");
-                // atualizarEstadoRele(rele[i].pino, 1);
                 atualizarEstadoRele(rele[i].pino, true, i + 1);
             }
             else if (jsonData.indexOf("\"status\":false") != -1)
             {
                 digitalWrite(rele[i].pino, LOW);
                 registrarEvento(("Relé " + String(i + 1)).c_str(), "Desativado");
-                // atualizarEstadoRele(rele[i].pino, 0);
                 atualizarEstadoRele(rele[i].pino, false, i + 1);
+            }
+
+            // Adicionando escuta do tempoPulso
+            if (jsonData.indexOf("\"tempoPulso\":") != -1)
+            {
+                int startIndex = jsonData.indexOf("\"tempoPulso\":") + 13;
+                int endIndex = jsonData.indexOf(",", startIndex);
+                if (endIndex == -1)
+                    endIndex = jsonData.indexOf("}", startIndex);
+
+                String tempoStr = jsonData.substring(startIndex, endIndex);
+                tempoStr.trim();
+                int novoTempo = tempoStr.toInt();
+
+                if (novoTempo > 0)
+                {
+                    temposPulso[i] = novoTempo;
+                    Serial.printf("Tempo de pulso do Relé %d atualizado para %d ms\n", i + 1, novoTempo);
+                }
             }
         }
     }
+
     if (jsonData.indexOf("\"horaAtivacao\":") != -1 && dataPath == "/rele1")
     {
         horaAtivacao = processarHorarios(dataPath, jsonData, "\"horaAtivacao\":", "/rele1");
@@ -529,42 +546,20 @@ void tiposBots()
         Serial.println("Horário de desativação capturado: " + horaDesativacao5);
     }
 
-    if (jsonData.indexOf("\"tipoBotao\":\"switch") != -1 && dataPath == "/rele1")
+    // Mantendo a lógica original para "Switch", mas agora usando o tempoPulso atualizado
+    for (int i = 0; i < 5; i++)
     {
-        digitalWrite(rele[0].pino, HIGH);
-        delay(200);
-        digitalWrite(rele[0].pino, LOW);
-        registrarEvento("Relé 1", "Ativado e Desativado");
-    }
-    if (jsonData.indexOf("\"tipoBotao\":\"switch") != -1 && dataPath == "/rele2")
-    {
-        digitalWrite(rele[1].pino, HIGH);
-        delay(200);
-        digitalWrite(rele[1].pino, LOW);
-        registrarEvento("Relé 2", "Ativado e Desativado");
-    }
-    if (jsonData.indexOf("\"tipoBotao\":\"switch") != -1 && dataPath == "/rele3")
-    {
-        digitalWrite(rele[2].pino, HIGH);
-        delay(200);
-        digitalWrite(rele[2].pino, LOW);
-        registrarEvento("Relé 3", "Ativado e Desativado");
-    }
-    if (jsonData.indexOf("\"tipoBotao\":\"switch") != -1 && dataPath == "/rele4")
-    {
-        digitalWrite(rele[3].pino, HIGH);
-        delay(200);
-        digitalWrite(rele[3].pino, LOW);
-        registrarEvento("Relé 4", "Ativado e Desativado");
-    }
-    if (jsonData.indexOf("\"tipoBotao\":\"switch") != -1 && dataPath == "/rele5")
-    {
-        digitalWrite(rele[4].pino, HIGH);
-        delay(200);
-        digitalWrite(rele[4].pino, LOW);
-        registrarEvento("Relé 5", "Ativado e Desativado");
+        String pathSwitch = "/rele" + String(i + 1);
+        if (jsonData.indexOf("\"tipoBotao\":\"switch") != -1 && dataPath == pathSwitch)
+        {
+            digitalWrite(rele[i].pino, HIGH);
+            delay(temposPulso[i]); // Usa o tempoPulso atualizado do Firebase
+            digitalWrite(rele[i].pino, LOW);
+            registrarEvento(("Relé " + String(i + 1)).c_str(), "Ativado e Desativado");
+        }
     }
 }
+
 
 void atualizarEstadoRele2(int rele, int estado)
 {
@@ -737,12 +732,7 @@ void startWiFiManager()
     }
 }
 
-String paginaPrincipal(int qtdRele,
-                       int releNumber,
-                       int tempoPulsoGlobal,
-                       int tempoEntradaGlobal,
-                       const String &horaAtivacaoGlobal,
-                       const String &horaDesativacaoGlobal)
+String paginaPrincipal(int qtdRele, int releNumber, int tempoPulsoGlobal, int tempoEntradaGlobal, const String &horaAtivacaoGlobal, const String &horaDesativacaoGlobal)
 {
     // HTML completo, unificando página de controle + formulários
     String html = R"rawliteral(
@@ -1553,7 +1543,7 @@ void setup()
     Serial.begin(115200);
     pinMode(BTN_CONFIG, INPUT);
     digitalWrite(25, HIGH);
-    pinMode(BTN_PIN, INPUT_PULLUP);
+    pinMode(BTN_PIN, INPUT);
 
     uint64_t chipid = ESP.getEfuseMac();
     sprintf(espUniqueId, "%04X%08X", (uint16_t)(chipid >> 32), (uint32_t)chipid);
@@ -1742,27 +1732,21 @@ void loop()
     verificarToken();
     int btnState = digitalRead(BTN_PIN);
 
-    if (btnState == LOW)
+    if (btnState == HIGH) // Botão pressionado
     {
-        // Botão está pressionado
         if (!buttonPressed)
         {
-            // Acabou de apertar
+            // Início da contagem do tempo de pressão
             buttonPressed = true;
             pressStartTime = millis();
         }
         else
         {
-            // Já estava pressionado antes, vamos checar se passou 5 seg
-            unsigned long pressedDuration = millis() - pressStartTime;
-            if (pressedDuration >= HOLD_TIME)
+            // Verifica se passou 5 segundos
+            if (millis() - pressStartTime >= HOLD_TIME)
             {
                 Serial.println("Botão pressionado por 5s. Formatando SPIFFS...");
-                SPIFFS.format(); // Apaga todos os arquivos do SPIFFS
-
-        
-                // Para evitar reformatar várias vezes seguidas
-                buttonPressed = false;
+                SPIFFS.format(); // Apaga todos os arquivos da SPIFFS
                 delay(500);
                 ESP.restart();
             }
@@ -1770,7 +1754,7 @@ void loop()
     }
     else
     {
-        // Botão está solto
+        // Botão solto, resetamos a flag
         buttonPressed = false;
     }
 
