@@ -423,7 +423,6 @@ void tiposBots()
         int code = firebaseData.httpCode();
         if (code != 0)
         {
-            // Se for -1000, 401, 404 etc., trate como desconexão
             Serial.printf("Stream caiu: httpCode=%d reason=%s\n", code, firebaseData.errorReason().c_str());
             reiniciarStream();
         }
@@ -432,7 +431,6 @@ void tiposBots()
     // 3) Se não chegou nada novo => apenas retorna
     if (!firebaseData.streamAvailable())
     {
-        // Não há alterações, nada a processar
         return;
     }
 
@@ -442,8 +440,7 @@ void tiposBots()
     Serial.println("Dados recebidos: " + jsonData);
 
     if (dataPath == "/keeplive")
-    { // Certifique-se de que o caminho está correto
-        // Extraia o valor do campo 'atualizado' recebido
+    {
         int startIndex = jsonData.indexOf("\"hora\":\"") + 7;
         int endIndex = jsonData.indexOf("\"", startIndex);
         String horarioAtualizado = jsonData.substring(startIndex, endIndex);
@@ -470,7 +467,7 @@ void tiposBots()
                 atualizarEstadoRele(rele[i].pino, false, i + 1);
             }
 
-            // Adicionando escuta do tempoPulso
+            // Escutando tempoPulso no Firebase e atualizando a variável
             if (jsonData.indexOf("\"tempoPulso\":") != -1)
             {
                 int startIndex = jsonData.indexOf("\"tempoPulso\":") + 13;
@@ -486,6 +483,25 @@ void tiposBots()
                 {
                     temposPulso[i] = novoTempo;
                     Serial.printf("Tempo de pulso do Relé %d atualizado para %d ms\n", i + 1, novoTempo);
+                }
+            }
+
+            // Escutando tempoDebouncing no Firebase e atualizando a variável
+            if (jsonData.indexOf("\"tempoDebouncing\":") != -1)
+            {
+                int startIndex = jsonData.indexOf("\"tempoDebouncing\":") + 18;
+                int endIndex = jsonData.indexOf(",", startIndex);
+                if (endIndex == -1)
+                    endIndex = jsonData.indexOf("}", startIndex);
+
+                String tempoStr = jsonData.substring(startIndex, endIndex);
+                tempoStr.trim();
+                int novoTempo = tempoStr.toInt();
+
+                if (novoTempo > 0)
+                {
+                    temposEntrada[i] = novoTempo;
+                    Serial.printf("Tempo de debouncing do Relé %d atualizado para %d ms\n", i + 1, novoTempo);
                 }
             }
         }
@@ -513,40 +529,7 @@ void tiposBots()
         Serial.println("Horário de desativação capturado: " + horaDesativacao2);
     }
 
-    if (jsonData.indexOf("\"horaAtivacao\":") != -1 && dataPath == "/rele3")
-    {
-        horaAtivacao3 = processarHorarios(dataPath, jsonData, "\"horaAtivacao\":", "/rele3");
-        Serial.println("Horário de ativação capturado: " + horaAtivacao3);
-    }
-    if (jsonData.indexOf("\"horaDesativacao\":") != -1 && dataPath == "/rele3")
-    {
-        horaDesativacao3 = processarHorarios(dataPath, jsonData, "\"horaDesativacao\":", "/rele3");
-        Serial.println("Horário de desativação capturado: " + horaDesativacao3);
-    }
-
-    if (jsonData.indexOf("\"horaAtivacao\":") != -1 && dataPath == "/rele4")
-    {
-        horaAtivacao4 = processarHorarios(dataPath, jsonData, "\"horaAtivacao\":", "/rele4");
-        Serial.println("Horário de ativação capturado: " + horaAtivacao4);
-    }
-    if (jsonData.indexOf("\"horaDesativacao\":") != -1 && dataPath == "/rele4")
-    {
-        horaDesativacao4 = processarHorarios(dataPath, jsonData, "\"horaDesativacao\":", "/rele4");
-        Serial.println("Horário de desativação capturado: " + horaDesativacao4);
-    }
-
-    if (jsonData.indexOf("\"horaAtivacao\":") != -1 && dataPath == "/rele5")
-    {
-        horaAtivacao5 = processarHorarios(dataPath, jsonData, "\"horaAtivacao\":", "/rele5");
-        Serial.println("Horário de ativação capturado: " + horaAtivacao5);
-    }
-    if (jsonData.indexOf("\"horaDesativacao\":") != -1 && dataPath == "/rele5")
-    {
-        horaDesativacao5 = processarHorarios(dataPath, jsonData, "\"horaDesativacao\":", "/rele5");
-        Serial.println("Horário de desativação capturado: " + horaDesativacao5);
-    }
-
-    // Mantendo a lógica original para "Switch", mas agora usando o tempoPulso atualizado
+    // Mantendo a lógica original para "Switch", mas agora usando tempoPulso atualizado
     for (int i = 0; i < 5; i++)
     {
         String pathSwitch = "/rele" + String(i + 1);
@@ -559,6 +542,7 @@ void tiposBots()
         }
     }
 }
+
 
 
 void atualizarEstadoRele2(int rele, int estado)
