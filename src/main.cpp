@@ -433,6 +433,7 @@ void tiposBots()
     {
         return;
     }
+
     // Se chegou aqui, significa que temos dados novos no stream
     String jsonData = firebaseData.to<String>();
     String dataPath = firebaseData.dataPath();
@@ -465,7 +466,8 @@ void tiposBots()
                 registrarEvento(("Relé " + String(i + 1)).c_str(), "Desativado");
                 atualizarEstadoRele(rele[i].pino, false, i + 1);
             }
-            // Escutando tempoPulso no Firebase e atualizando a variável
+
+            // Escutando tempoPulso no Firebase (Somente para switch)
             if (jsonData.indexOf("\"tempoPulso\":") != -1)
             {
                 int startIndex = jsonData.indexOf("\"tempoPulso\":") + 13;
@@ -475,15 +477,16 @@ void tiposBots()
 
                 String tempoStr = jsonData.substring(startIndex, endIndex);
                 tempoStr.trim();
-                int novoTempo = tempoStr.toInt();
+                int novoTempoPulso = tempoStr.toInt();
 
-                if (novoTempo > 0)
+                if (novoTempoPulso > 0)
                 {
-                    temposPulso[i] = novoTempo;
-                    Serial.printf("Tempo de pulso do Relé %d atualizado para %d ms\n", i + 1, novoTempo);
+                    temposPulso[i] = novoTempoPulso;
+                    Serial.printf("Tempo de pulso do Relé %d atualizado para %d ms\n", i + 1, novoTempoPulso);
                 }
             }
-            // Escutando tempoDebouncing no Firebase e atualizando a variável
+
+            // Escutando tempoDebouncing no Firebase (Somente para botões físicos)
             if (jsonData.indexOf("\"tempoDebouncing\":") != -1)
             {
                 int startIndex = jsonData.indexOf("\"tempoDebouncing\":") + 18;
@@ -493,15 +496,16 @@ void tiposBots()
 
                 String tempoStr = jsonData.substring(startIndex, endIndex);
                 tempoStr.trim();
-                int novoTempo = tempoStr.toInt();
+                int novoTempoDebouncing = tempoStr.toInt();
 
-                if (novoTempo > 0)
+                if (novoTempoDebouncing > 0)
                 {
-                    temposEntrada[i] = novoTempo;
-                    Serial.printf("Tempo de debouncing do Relé %d atualizado para %d ms\n", i + 1, novoTempo);
+                    temposEntrada[i] = novoTempoDebouncing;
+                    Serial.printf("Tempo de debouncing do Relé %d atualizado para %d ms\n", i + 1, novoTempoDebouncing);
                 }
             }
-            // Escutando modoAcionamento no Firebase e atualizando a variável
+
+            // Escutando modoAcionamento no Firebase e atualizando a variável correta
             if (jsonData.indexOf("\"modoAcionamento\":") != -1)
             {
                 int startIndex = jsonData.indexOf("\"modoAcionamento\":") + 18;
@@ -521,37 +525,22 @@ void tiposBots()
             }
         }
     }
-    // Mantendo a lógica original para "Switch", mas agora usando tempoPulso atualizado
+
+    // **🚀 Acionando apenas o Switch com tempoPulso!**
     for (int i = 0; i < 5; i++)
     {
         String pathSwitch = "/rele" + String(i + 1);
         if (jsonData.indexOf("\"tipoBotao\":\"switch") != -1 && dataPath == pathSwitch)
         {
-            // Lógica de acionamento conforme o modo atualizado
-            switch (modoAcionamento[i])
-            {
-            case 0: // Manter Ligado
-                digitalWrite(rele[i].pino, HIGH);
-                registrarEvento(("Relé " + String(i + 1)).c_str(), "Ativado - Manter Ligado");
-                break;
-
-            case 1: // Pulso
-                digitalWrite(rele[i].pino, HIGH);
-                delay(temposPulso[i]);
-                digitalWrite(rele[i].pino, LOW);
-                registrarEvento(("Relé " + String(i + 1)).c_str(), "Ativado e Desativado - Pulso");
-                break;
-
-            case 2: // Desligar ao soltar
-                digitalWrite(rele[i].pino, HIGH);
-                delay(temposEntrada[i]);
-                digitalWrite(rele[i].pino, LOW);
-                registrarEvento(("Relé " + String(i + 1)).c_str(), "Ativado e Desativado - Desligar ao soltar");
-                break;
-            }
+            // O tempoPulso é utilizado apenas quando o ESP recebe o comando switch!
+            digitalWrite(rele[i].pino, HIGH);
+            delay(temposPulso[i]); //  Somente tempoPulso aplicado ao switch!
+            digitalWrite(rele[i].pino, LOW);
+            registrarEvento(("Relé " + String(i + 1)).c_str(), "Ativado e Desativado - Switch");
         }
     }
 }
+
 
 void atualizarEstadoRele2(int rele, int estado)
 {
