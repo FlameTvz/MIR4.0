@@ -8,7 +8,7 @@
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
 
-const char *API_KEY = "AIzaSyCPV9DQPoPoEXSkDYazAehyugOhKm4NhQ0";
+const char *API_KEY = "AIzaSyBbbkxHGdp00gDNoUfpYVH5ezBm5rEw3gY";
 const char *DATABASE_URL = "https://poised-bot-443613-p6-default-rtdb.firebaseio.com/";
 const char *EMAIL = "leandro.lopes@inovanex.com.br";
 const char *EMAIL_PASSWORD = "Inova123NEX";
@@ -35,6 +35,8 @@ String horaDesativacao4 = "";
 String horaAtivacao5 = "";
 String horaDesativacao5 = "";
 String horarioAtual = "";
+
+
 
 bool ethernetConnected = false, wifiConnected = false;
 byte mac[] = {0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED};

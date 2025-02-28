@@ -85,47 +85,6 @@ void tokenStatusCallback(TokenInfo info)
     }
 }
 
-void registrarEvento(const char *releStr, const char *evento)
-{
-    FirebaseJson content;
-
-    // Adiciona o ID do ESP32 ao JSON
-    content.set("fields/espId/stringValue", espUniqueId);
-
-    // Adiciona as informações do relé e do evento
-    content.set("fields/rele/stringValue", releStr);
-    content.set("fields/evento/stringValue", evento);
-
-    // Obter o epoch time do NTPClient
-    time_t epochTime = timeClient.getEpochTime();
-    struct tm *timeinfo = localtime(&epochTime);
-
-    // Formatar data e hora
-    char dataStr[11]; // "YYYY-MM-DD"
-    strftime(dataStr, sizeof(dataStr), "%Y-%m-%d", timeinfo);
-
-    char horaStr[9]; // "HH:MM:SS"
-    strftime(horaStr, sizeof(horaStr), "%H:%M:%S", timeinfo);
-
-    // Adicionar data e hora ao JSON
-    content.set("fields/data/stringValue", dataStr);
-    content.set("fields/hora/stringValue", horaStr);
-
-    // Definir o caminho do documento no Firestore
-    String documentPath = "eventos/" + String(random(0, 100000));
-
-    // Enviar os dados para o Firestore
-    if (Firebase.Firestore.createDocument(&firebaseData, PROJECT_ID, "", documentPath.c_str(), content.raw()))
-    {
-        Serial.println(F("Documento criado com sucesso no Firestore."));
-    }
-    else
-    {
-        Serial.print(F("Erro ao criar documento: "));
-        Serial.println(firebaseData.errorReason());
-    }
-}
-
 void leRele()
 {
     bool valor;
@@ -315,11 +274,12 @@ void salvarConfiguracoes()
     for (int i = 0; i < qtdRele; i++)
     {
         JsonObject obj = arr.createNestedObject();
-        obj["tempoPulso"] = temposPulso[i];
-        obj["tempoEntrada"] = temposEntrada[i];
-        obj["horaAtivacao"] = rele[i].horaAtivacao;
-        obj["horaDesativacao"] = rele[i].horaDesativacao;
-        // se quiser salvar "nome" também: obj["nome"] = rele[i].nome;
+        obj["tempoPulso"]       = temposPulso[i];
+        obj["tempoEntrada"]     = temposEntrada[i];           // (campo antigo)
+        obj["tempoDebouncing"]  = temposEntrada[i];           // (campo novo adicionado!)
+        obj["horaAtivacao"]     = rele[i].horaAtivacao;
+        obj["horaDesativacao"]  = rele[i].horaDesativacao;
+        // se tiver nome: obj["nome"] = rele[i].nome;
     }
 
     // Abre/cria o arquivo e escreve
@@ -335,6 +295,7 @@ void salvarConfiguracoes()
         Serial.println("Falha ao abrir /configRele.json para escrita");
     }
 }
+
 
 void carregarConfiguracoes()
 {
@@ -457,14 +418,10 @@ void tiposBots()
             if (jsonData.indexOf("\"status\":true") != -1)
             {
                 digitalWrite(rele[i].pino, HIGH);
-                registrarEvento(("Relé " + String(i + 1)).c_str(), "Ativado");
-                atualizarEstadoRele(rele[i].pino, true, i + 1);
             }
             else if (jsonData.indexOf("\"status\":false") != -1)
             {
                 digitalWrite(rele[i].pino, LOW);
-                registrarEvento(("Relé " + String(i + 1)).c_str(), "Desativado");
-                atualizarEstadoRele(rele[i].pino, false, i + 1);
             }
 
             // Escutando tempoPulso no Firebase (Somente para switch)
@@ -502,6 +459,9 @@ void tiposBots()
                 {
                     temposEntrada[i] = novoTempoDebouncing;
                     Serial.printf("Tempo de debouncing do Relé %d atualizado para %d ms\n", i + 1, novoTempoDebouncing);
+
+                    // **SALVA NO SPIFFS** para não perder ao reiniciar:
+                    salvarConfiguracoes();
                 }
             }
 
@@ -526,7 +486,7 @@ void tiposBots()
         }
     }
 
-    // **🚀 Acionando apenas o Switch com tempoPulso!**
+    // ** Acionando apenas o Switch com tempoPulso!**
     for (int i = 0; i < 5; i++)
     {
         String pathSwitch = "/rele" + String(i + 1);
@@ -536,25 +496,7 @@ void tiposBots()
             digitalWrite(rele[i].pino, HIGH);
             delay(temposPulso[i]); //  Somente tempoPulso aplicado ao switch!
             digitalWrite(rele[i].pino, LOW);
-            registrarEvento(("Relé " + String(i + 1)).c_str(), "Ativado e Desativado - Switch");
         }
-    }
-}
-
-
-void atualizarEstadoRele2(int rele, int estado)
-{
-    // Construa o caminho correto para o campo dentro de "rele1" ou "rele2"
-    String relePath = "/IdsESP/" + String(espUniqueId) + "/rele" + String(rele) + "/status";
-
-    // Atualiza o campo "status" no caminho especificado
-    if (Firebase.RTDB.setInt(&firebaseData, relePath.c_str(), estado))
-    {
-        Serial.println("Estado do rele " + String(rele) + " atualizado para: " + String(estado));
-    }
-    else
-    {
-        Serial.println("Erro ao atualizar estado do rele " + String(rele) + ": " + firebaseData.errorReason());
     }
 }
 
@@ -573,15 +515,11 @@ void verificarHorarioReles(String ativacao, String desativacao, int pino, int re
         {
             digitalWrite(pino, HIGH);
             Serial.printf("Relé %d ativado!\n", releNum);
-            atualizarEstadoRele2(releNum, true);
-            registrarEvento(("Relé " + String(releNum)).c_str(), "Ativado");
         }
         if (abs(horaAtualSeg - horaDesativacaoSeg) <= tolerancia)
         {
             digitalWrite(pino, LOW);
             Serial.printf("Relé %d desativado!\n", releNum);
-            atualizarEstadoRele2(releNum, false);
-            registrarEvento(("Relé " + String(releNum)).c_str(), "Desativado");
         }
     }
 }
@@ -1519,6 +1457,88 @@ void enviarHeartbeat()
     }
 }
 
+void carregarConfiguracoesDoFirebase()
+{
+    Serial.println("🔄 Buscando configurações do Firebase...");
+
+    for (int i = 0; i < qtdRele; i++)
+    {
+        // Caminho base do Realtime Database para o rele i
+        String basePath = "/IdsESP/" + String(espUniqueId) + "/rele" + String(i + 1);
+
+        // ==========================
+        // 1) tempoPulso
+        // ==========================
+        if (Firebase.RTDB.getInt(&firebaseData, basePath + "/tempoPulso") && firebaseData.dataType() == "int")
+        {
+            temposPulso[i] = firebaseData.intData();
+            Serial.printf("⏱️ tempoPulso[%d]: %d\n", i, temposPulso[i]);
+        }
+
+        // ==========================
+        // 2) modoAcionamento
+        // ==========================
+        if (Firebase.RTDB.getInt(&firebaseData, basePath + "/modoAcionamento") && firebaseData.dataType() == "int")
+        {
+            modoAcionamento[i] = firebaseData.intData();
+            Serial.printf("🔄 modoAcionamento[%d]: %d\n", i, modoAcionamento[i]);
+        }
+
+        // ==========================
+        // 3) horaAtivacao
+        // ==========================
+        if (Firebase.RTDB.getString(&firebaseData, basePath + "/horaAtivacao") && firebaseData.dataType() == "string")
+        {
+            rele[i].horaAtivacao = firebaseData.stringData();
+            Serial.printf("⏰ horaAtivacao[%d]: %s\n", i, rele[i].horaAtivacao.c_str());
+        }
+
+        // ==========================
+        // 4) horaDesativacao
+        // ==========================
+        if (Firebase.RTDB.getString(&firebaseData, basePath + "/horaDesativacao") && firebaseData.dataType() == "string")
+        {
+            rele[i].horaDesativacao = firebaseData.stringData();
+            Serial.printf("⏰ horaDesativacao[%d]: %s\n", i, rele[i].horaDesativacao.c_str());
+        }
+
+        // ==========================
+        // 5) tempoDebouncing
+        // ==========================
+        if (Firebase.RTDB.getInt(&firebaseData, basePath + "/tempoDebouncing") && firebaseData.dataType() == "int")
+        {
+            temposEntrada[i] = firebaseData.intData();
+            Serial.printf("🔄 tempoDebouncing[%d]: %d\n", i, temposEntrada[i]);
+        }
+
+        // ==========================
+        // 6) status (true/false)
+        // ==========================
+        // Ajuste se seu status for int ou string. Este exemplo supõe bool.
+        if (Firebase.RTDB.getBool(&firebaseData, basePath + "/status") && firebaseData.dataType() == "boolean")
+        {
+            bool st = firebaseData.boolData();
+            digitalWrite(rele[i].pino, st ? HIGH : LOW);
+            rele[i].status = st ? 1 : 0;
+            Serial.printf("Relé %d => status: %s\n", i + 1, st ? "Ligado" : "Desligado");
+        }
+        else
+        {
+            Serial.printf("Falha ao ler 'status' do Rele %d: %s\n",
+                          i + 1, firebaseData.errorReason().c_str());
+        }
+    }
+
+    Serial.println("✅ Configurações carregadas do Firebase.");
+}
+
+
+void atualizarConfiguracoes()
+{
+    Serial.println("🔄 Atualização detectada no Firebase!");
+    carregarConfiguracoesDoFirebase();
+}
+
 void setup()
 {
     Serial.begin(115200);
@@ -1544,6 +1564,10 @@ void setup()
     {
         Serial.println("Falha ao montar o sistema de arquivos!");
         return;
+    }
+    else
+    {
+        carregarConfiguracoes();
     }
 
     // Carregar configuração de Wi-Fi
@@ -1622,17 +1646,6 @@ void setup()
     FirebaseJson content;
     content.set("fields/espId/stringValue", espUniqueId);
 
-    String documentPath = "eventos/" + String(espUniqueId); // Documento com o ID único
-    if (!Firebase.Firestore.createDocument(&firebaseData, PROJECT_ID, "", documentPath.c_str(), content.raw()))
-    {
-        Serial.print("Erro ao registrar ID no Firestore: ");
-        Serial.println(firebaseData.errorReason());
-    }
-    else
-    {
-        Serial.println("ID registrado no Firestore com sucesso.");
-    }
-
     // Configurar caminho para o Realtime Database
     databasePath = "/IdsESP/" + String(espUniqueId);
 
@@ -1646,6 +1659,7 @@ void setup()
     {
         Serial.println("Stream do Realtime Database iniciado com sucesso.");
     }
+    carregarConfiguracoesDoFirebase();
 
     // Configuração do Web Server
     configurarWebServer();
@@ -1656,6 +1670,8 @@ void loop()
     leRele();
     entradaNaSaida();
     controlarRelesWebServer();
+
+    delay(10);
 
     static unsigned long lastStreamAttempt = 0;
     if (millis() - lastStreamAttempt > 200)
