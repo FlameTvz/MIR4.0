@@ -86,6 +86,10 @@ int temposPulso[5] = {200, 200, 200, 200, 200};
 bool relesAtivos[5] = {false, false, false, false, false};
 int modoAcionamento[5] = {2, 2, 2, 2, 2};
 
+unsigned long lastCheckTime = 0;
+const unsigned long checkInterval = 30000;  // Tempo de verificação (30 segundos)
+
+
 int tempoEntrada = 200;
 // int tempoEntrada = 200;
 struct SwitchTask

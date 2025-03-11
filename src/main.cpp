@@ -274,11 +274,11 @@ void salvarConfiguracoes()
     for (int i = 0; i < qtdRele; i++)
     {
         JsonObject obj = arr.createNestedObject();
-        obj["tempoPulso"]       = temposPulso[i];
-        obj["tempoEntrada"]     = temposEntrada[i];           // (campo antigo)
-        obj["tempoDebouncing"]  = temposEntrada[i];           // (campo novo adicionado!)
-        obj["horaAtivacao"]     = rele[i].horaAtivacao;
-        obj["horaDesativacao"]  = rele[i].horaDesativacao;
+        obj["tempoPulso"] = temposPulso[i];
+        obj["tempoEntrada"] = temposEntrada[i];    // (campo antigo)
+        obj["tempoDebouncing"] = temposEntrada[i]; // (campo novo adicionado!)
+        obj["horaAtivacao"] = rele[i].horaAtivacao;
+        obj["horaDesativacao"] = rele[i].horaDesativacao;
         // se tiver nome: obj["nome"] = rele[i].nome;
     }
 
@@ -295,7 +295,6 @@ void salvarConfiguracoes()
         Serial.println("Falha ao abrir /configRele.json para escrita");
     }
 }
-
 
 void carregarConfiguracoes()
 {
@@ -1532,11 +1531,83 @@ void carregarConfiguracoesDoFirebase()
     Serial.println("✅ Configurações carregadas do Firebase.");
 }
 
-
 void atualizarConfiguracoes()
 {
     Serial.println("🔄 Atualização detectada no Firebase!");
     carregarConfiguracoesDoFirebase();
+}
+
+bool usuarioAutorizado = false; // Variável global para armazenar o status do usuário
+
+void verificarPermissaoUsuario(String userID)
+{
+    String firebasePath = "/IdsESP/" + String(espUniqueId) + "/owner";
+
+    if (Firebase.RTDB.getString(&firebaseData, firebasePath))
+    {
+        String ownerID = firebaseData.stringData();
+        Serial.println("👤 Dono do ESP registrado: " + ownerID);
+        Serial.println("👤 Usuário tentando acessar: " + userID);
+
+        if (ownerID == userID)
+        {
+            usuarioAutorizado = true;
+            Serial.println("✅ Acesso permitido! O usuário pode controlar este ESP.");
+        }
+        else
+        {
+            usuarioAutorizado = false;
+            Serial.println("⛔ Acesso revogado! O ESP será bloqueado para este usuário.");
+        }
+    }
+    else
+    {
+        Serial.println("❌ Erro ao verificar dono do ESP: " + firebaseData.errorReason());
+        usuarioAutorizado = false;
+    }
+}
+
+void verificarPermissaoPeriodicamente() {
+    unsigned long currentTime = millis();
+    if (currentTime - lastCheckTime >= checkInterval) {
+        lastCheckTime = currentTime; // Atualiza o tempo da última verificação
+
+        // Obtém o userID salvo no Firebase
+        String firebaseUserPath = "/IdsESP/" + String(espUniqueId) + "/lastUser";
+
+        if (Firebase.RTDB.getString(&firebaseData, firebaseUserPath)) {
+            String userID = firebaseData.stringData();
+            verificarPermissaoUsuario(userID); // Verifica se o usuário tem permissão
+        } else {
+            Serial.println("❌ Erro ao obter userID do Firebase: " + firebaseData.errorReason());
+        }
+    }
+}
+
+void registrarESPNoUsuario(String userID)
+{
+    String pathOwner = "/IdsESP/" + String(espUniqueId) + "/owner";
+    String pathUserESP = "/users/" + userID + "/ESPs/" + String(espUniqueId);
+
+    // Define este ESP como pertencente ao usuário no caminho IdsESP/{espID}/owner
+    if (Firebase.RTDB.setString(&firebaseData, pathOwner, userID))
+    {
+        Serial.println("✅ Dono do ESP registrado com sucesso: " + userID);
+    }
+    else
+    {
+        Serial.println("❌ Erro ao registrar dono do ESP: " + firebaseData.errorReason());
+    }
+
+    // Adiciona este ESP à lista do usuário em users/{userID}/ESPs/{espID}
+    if (Firebase.RTDB.setBool(&firebaseData, pathUserESP, true))
+    {
+        Serial.println("✅ ESP vinculado ao usuário no Firebase.");
+    }
+    else
+    {
+        Serial.println("❌ Erro ao vincular ESP ao usuário: " + firebaseData.errorReason());
+    }
 }
 
 void setup()
@@ -1661,6 +1732,23 @@ void setup()
     }
     carregarConfiguracoesDoFirebase();
 
+    String firebaseUserPath = "/IdsESP/" + String(espUniqueId) + "/lastUser";
+
+    if (Firebase.RTDB.getString(&firebaseData, firebaseUserPath))
+    {
+        String userID = firebaseData.stringData();
+        Serial.println("👤 Último usuário autenticado no app: " + userID);
+
+        registrarESPNoUsuario(userID);
+
+        // Verifica se o usuário tem permissão para acessar este ESP
+        verificarPermissaoUsuario(userID);
+    }
+    else
+    {
+        Serial.println("❌ Erro ao obter userID do Firebase: " + firebaseData.errorReason());
+    }
+
     // Configuração do Web Server
     configurarWebServer();
 }
@@ -1754,6 +1842,14 @@ void loop()
         // Botão solto, resetamos a flag
         buttonPressed = false;
     }
+    verificarPermissaoPeriodicamente();  // Verifica a permissão do usuário a cada 30s
+
+    if (!usuarioAutorizado) {
+        Serial.println("⚠️ Acesso bloqueado. Nenhuma ação será permitida!");
+        delay(5000); // Espera um tempo antes de verificar novamente
+        return;
+    }
+
 
     delay(100); // Pequeno delay para evitar loops excessivos
 }
