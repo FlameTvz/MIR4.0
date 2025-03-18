@@ -14,6 +14,8 @@ const char *EMAIL = "leandro.lopes@inovanex.com.br";
 const char *EMAIL_PASSWORD = "Inova123NEX";
 const char *PROJECT_ID = "poised-bot-443613-p6";
 
+bool usuarioAutorizado = false; // Variável global para armazenar o status do usuário
+
 // Definição dos objetos do Firebase
 char espUniqueId[13]; // Variable to hold the ESP32 unique ID
 String databasePath;  // Variable to hold the database path
@@ -108,3 +110,69 @@ unsigned long pressStartTime = 0;
 
 // 22 scl
 // 21 sda
+
+
+const char *htmlPage PROGMEM = R"rawliteral(
+    <!DOCTYPE html>
+    <html lang="pt-br">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Configuração Wi-Fi</title>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                background-color: #f2f2f2;
+                color: #333;
+                text-align: center;
+                margin: 0;
+                padding: 0;
+            }
+            h1 {
+                margin-top: 20px;
+                color: #444;
+            }
+            form {
+                display: inline-block;
+                background-color: #fff;
+                padding: 20px;
+                border-radius: 8px;
+                box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+                margin-top: 20px;
+            }
+            input[type="text"], input[type="password"] {
+                width: 100%;
+                padding: 10px;
+                margin: 10px 0;
+                border: 1px solid #ccc;
+                border-radius: 4px;
+                box-sizing: border-box;
+            }
+            input[type="submit"] {
+                background-color: #4CAF50;
+                color: white;
+                border: none;
+                padding: 10px 20px;
+                border-radius: 4px;
+                cursor: pointer;
+                font-size: 16px;
+            }
+            input[type="submit"]:hover {
+                background-color: #45a049;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>Configuração Wi-Fi</h1>
+        <form action="/connect" method="post">
+            <label for="ssid">Nome da Rede (SSID):</label>
+            <input type="text" id="ssid" name="ssid" required>
+    
+            <label for="password">Senha:</label>
+            <input type="password" id="password" name="password" required>
+    
+            <input type="submit" value="Conectar">
+        </form>
+    </body>
+    </html>
+    )rawliteral";
